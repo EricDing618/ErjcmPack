@@ -1,7 +1,7 @@
 // ============================================================
-//  cr/station_summary.js - 国铁车站总览大屏 (间距优化版)
+//  cr/station_summary.js - 国铁车站总览大屏 (均衡布局版)
 //  功能：汇总车站内所有站台的列车信息，按发车时间升序排列
-//  修复：增加列间距，优化列宽分配，文字不再挤在一起
+//  修复：列间距适中，底部字体缩小且不再重叠
 // ============================================================
 
 // ============================================================
@@ -17,15 +17,15 @@ var CONFIG = {
     bottomLeftColor: 0x00ff66,
     bottomRightColor: 0xff4444,
     removeStationSuffix: true,
-    departedRetentionMs: 120000,      // 发车后保留2分钟
-    terminatedRetentionMs: 5000,      // 终到后保留5秒
-    DEBUG: true,                      // 开启调试
-    minRows: 5,                       // 最少显示行数
-    columnSpacing: 100,                 // ★ 列与列之间的间距（像素），调大则更宽松
+    departedRetentionMs: 120000,
+    terminatedRetentionMs: 5000,
+    DEBUG: true,
+    minRows: 3,                       // 最少显示3行
+    columnSpacing: 12,                // ★ 列间距适中，不挤不散
 };
 
 // ============================================================
-//  工具函数
+//  工具函数（保持不变）
 // ============================================================
 
 function parseStationName(name) {
@@ -84,11 +84,11 @@ function render(ctx, state, pids) {
         .stretchXY()
         .draw(ctx);
 
-    // ----- 收集列车数据 -----
+    // 收集列车数据
     var arrivals = pids.arrivals();
     var allTrains = [];
 
-    // ---- 动态调试 ----
+    // 调试输出（每5秒）
     if (CONFIG.DEBUG) {
         var now = Date.now();
         if (!state._lastDebugTime || (now - state._lastDebugTime) > 5000) {
@@ -121,7 +121,7 @@ function render(ctx, state, pids) {
         }
     }
 
-    // ----- 处理每条 Arrival 记录 -----
+    // 处理每条Arrival
     if (arrivals) {
         var count = 0;
         if (typeof arrivals.size === 'function') {
@@ -148,7 +148,6 @@ function render(ctx, state, pids) {
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
 
-            // 终到列车处理
             if (isTerminating) {
                 var termTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
@@ -162,9 +161,7 @@ function render(ctx, state, pids) {
                     status = '终到';
                     statusColor = 0xffffff;
                 }
-            }
-            // 非终到列车
-            else {
+            } else {
                 var actualDep = departureTime;
                 if (isRealtime) {
                     actualDep = departureTime + deviationMs;
@@ -212,37 +209,33 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 排序
     allTrains.sort(function(a, b) {
         return a.actualDeparture - b.actualDeparture;
     });
 
-    // ----- 自适应布局参数（含列间距） -----
-    var paddingLeft = 6;
-    var paddingRight = 10;
+    // ----- 布局参数（优化） -----
+    var paddingLeft = 8;
+    var paddingRight = 12;
     var headerHeight = 22;
-    var rowHeight = 10;
+    var rowHeight = 16;                // 行高适中
     var bottomInfoHeight = 22;
     var paddingTop = 4;
 
     // 列权重（车次:始发:终到:时间:站台:状态）
-    var colWeights = [45, 70, 70, 55, 40, 50];
+    var colWeights = [50, 80, 80, 60, 45, 55];
     var weightSum = colWeights.reduce(function(a, b) { return a + b; }, 0);
-    
-    // ★ 核心修复：计算可用宽度时，先扣除列间距占用的总宽度
+
     var columnCount = colWeights.length;
     var totalSpacing = (columnCount - 1) * CONFIG.columnSpacing;
     var availableWidth = screenWidth - paddingLeft - paddingRight - totalSpacing;
-    
-    // 按权重分配各列宽度
+
     var colRoute = Math.floor(availableWidth * colWeights[0] / weightSum);
     var colOrigin = Math.floor(availableWidth * colWeights[1] / weightSum);
     var colDest = Math.floor(availableWidth * colWeights[2] / weightSum);
     var colTime = Math.floor(availableWidth * colWeights[3] / weightSum);
     var colPlatform = Math.floor(availableWidth * colWeights[4] / weightSum);
     var colStatus = availableWidth - (colRoute + colOrigin + colDest + colTime + colPlatform);
-    
-    // 构建列宽数组，方便循环绘制
+
     var colWidths = [colRoute, colOrigin, colDest, colTime, colPlatform, colStatus];
     var colLabels = ['车次', '始发站', '终到站', '开点', '站台', '状态'];
     var colKeys = ['route', 'origin', 'dest', 'time', 'platform', 'status'];
@@ -250,7 +243,6 @@ function render(ctx, state, pids) {
     var tableLeft = paddingLeft;
     var tableRight = paddingLeft + availableWidth + totalSpacing;
 
-    // 计算最大行数
     var maxRows = Math.floor((screenHeight - headerHeight - bottomInfoHeight - paddingTop) / rowHeight);
     if (maxRows < CONFIG.minRows) maxRows = CONFIG.minRows;
 
@@ -272,7 +264,7 @@ function render(ctx, state, pids) {
             .color(CONFIG.primaryTextColor)
             .scale(0.8)
             .draw(ctx);
-        xPos += colWidths[h] + CONFIG.columnSpacing; // 加上列间距
+        xPos += colWidths[h] + CONFIG.columnSpacing;
     }
 
     // ----- 数据行 -----
@@ -303,7 +295,6 @@ function render(ctx, state, pids) {
         ];
 
         for (var d = 0; d < rowData.length; d++) {
-            // 状态列使用动态颜色
             var color = (d === 5) ? train.statusColor : CONFIG.primaryTextColor;
             Text.create('row_' + idx + '_' + colKeys[d])
                 .text(rowData[d])
@@ -315,7 +306,7 @@ function render(ctx, state, pids) {
         }
     }
 
-    // ----- 底部 -----
+    // ----- 底部（优化字体和位置） -----
     var bottomY = screenHeight - bottomInfoHeight + 2;
     Text.create('divider')
         .text(' ')
@@ -324,21 +315,23 @@ function render(ctx, state, pids) {
         .color(0x444466)
         .stretchXY()
         .draw(ctx);
-    
+
+    // 底部标语（左对齐，字体缩小）
     Text.create('bottom_left')
-        .text('开车前10分钟开始检票，开车前3分钟停止检票。')
+        .text('开车前10分钟检票，前3分钟停止检票')
         .pos(tableLeft, bottomY)
         .color(CONFIG.bottomLeftColor)
-        .scale(0.7)
+        .scale(0.55)                     // 缩小字体
         .leftAlign()
         .draw(ctx);
-    
+
+    // 底部时间（右对齐，与状态栏右侧对齐）
     var timeStr = getFormattedTime();
     Text.create('bottom_right')
         .text(timeStr)
-        .pos(tableRight - 2, bottomY)
+        .pos(tableRight, bottomY)       // 右对齐到表格右边界
         .color(CONFIG.bottomRightColor)
-        .scale(0.7)
+        .scale(0.55)                    // 与标语同大小
         .rightAlign()
         .draw(ctx);
 
