@@ -1,40 +1,45 @@
 // ============================================================
-//  【配置区】
+//  【配置区】—— 所有参数均可按需调整
 // ============================================================
 
 var CONFIG = {
-    backgroundColor: 0x1a1a3e,
-    primaryTextColor: 0xd0d0d0,
-    headerBgColor: 0x0d0d2b,
-    rowEvenColor: 0x1e1e4a,
-    rowOddColor: 0x2a2a5a,
-    bottomLeftColor: 0x00ff66,
-    bottomRightColor: 0xff4444,
-    removeStationSuffix: true,
-    departedRetentionMs: 120000,
-    terminatedRetentionMs: 120000,
-    DEBUG: true,
+    // ----- 颜色配置 -----
+    backgroundColor: 0x1a1a3e,      // 屏幕背景色（深蓝紫色）
+    primaryTextColor: 0xd0d0d0,     // 普通文字颜色（浅灰色）
+    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）
+    rowEvenColor: 0x1e1e4a,         // 偶数行背景色
+    rowOddColor: 0x2a2a5a,          // 奇数行背景色
+    bottomLeftColor: 0x00ff66,      // 底部左侧标语颜色（亮绿色）
+    bottomRightColor: 0xff4444,     // 底部右侧时间颜色（红色）
 
-    // ★ 固定显示行数
-    fixedRows: 5,
+    // ----- 文字处理 -----
+    removeStationSuffix: true,      // true = 站名去掉“站”字
 
-    // ★ 行高和表头高度
-    rowHeight: 16,
-    headerHeight: 22,
-    paddingLeft: 8,
-    paddingRight: 12,
+    // ----- ★★★ 状态保留时间（毫秒）★★★ -----
+    departedRetentionMs: 12000,    // 【停止检票】后保留 60000ms = 1分钟（缓存精确控制）
+    terminatedRetentionMs: 12000,  // 【到达】后保留 60000ms = 1分钟（缓存精确控制）
 
-    // ★ 底部信息与数据区域底部之间的间距（像素）
-    bottomOffset: 4,
+    // ----- 调试 -----
+    DEBUG: true,                    // true = 每5秒输出调试信息
 
-    // ★ 固定列宽和间距
+    // ----- 布局核心参数 -----
+    fixedRows: 5,                   // ★ 固定显示行数，不足时用空行补齐
+
+    rowHeight: 16,                  // 每行数据的高度（像素）
+    headerHeight: 22,               // 表头高度（像素）
+    paddingLeft: 8,                 // 表格左侧内边距（像素）
+    paddingRight: 12,               // 表格右侧内边距（像素）
+
+    // ★★★ 固定列宽（像素）顺序：车次, 始发站, 终到站, 开点, 站台, 状态
     colWidths: [50, 110, 110, 45, 35, 55],
+
+    // ★★★ 列间距（像素）顺序：车次-始发, 始发-终到, 终到-开点, 开点-站台, 站台-状态
     colGaps: [25, 25, 20, 20, 20],
 
-    // ★ 整行着色
-    rowColorByStatus: true,
+    // ★★★ 整行着色开关 ★★★
+    rowColorByStatus: true,         // true = 整行文字跟随状态颜色
 
-    // ★ 底部文字
+    // ----- 底部信息 -----
     bottomText: '开车前10分钟检票，前3分钟停止检票',
     bottomTextScale: 0.55,
 };
@@ -99,9 +104,22 @@ function render(ctx, state, pids) {
         .stretchXY()
         .draw(ctx);
 
+    // ----- ★★★ 缓存管理 ★★★ -----
+    if (!state.cache) state.cache = [];
+
+    // 1. 清理超时的缓存项
+    state.cache = state.cache.filter(function(item) {
+        var retention = (item.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
+        return (currentTime - item.cacheTime) <= retention;
+    });
+
     // 收集列车数据
     var arrivals = pids.arrivals();
     var allTrains = [];
+
+    // 用于记录所有已处理列车的唯一键（避免重复）
+    // ★★★ 使用更可靠的唯一键：车次 + 目的地 + 站台 + 计划时间（只取小时和分钟）★★★
+    var processedKeys = {};
 
     // 调试输出
     if (CONFIG.DEBUG) {
@@ -133,16 +151,25 @@ function render(ctx, state, pids) {
                 print('无列车');
             }
             print('===== 调试结束 =====');
+            print('缓存大小: ' + state.cache.length);
         }
     }
 
-    // 处理每条Arrival
+    // ---- 生成唯一键的工具函数 ----
+    function makeKey(routeNumber, destination, platform, departureTime) {
+        // 使用计划时间的小时和分钟作为键的一部分，避免因偏差变化导致键变化
+        var d = new Date(departureTime);
+        var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        return routeNumber + '|' + destination + '|' + platform + '|' + timeStr;
+    }
+
+    // ---- 处理 arrivals 中的数据 ----
     if (arrivals) {
         var count = 0;
         if (typeof arrivals.size === 'function') {
             count = arrivals.size();
         } else {
-            for (var i = 0; i < 20; i++) {
+            for (var i = 0; i < 30; i++) {
                 if (arrivals.get(i)) count = i + 1;
                 else break;
             }
@@ -165,7 +192,6 @@ function render(ctx, state, pids) {
 
             // ---- 终到列车 ----
             if (isTerminating) {
-                // 计算实际到达时间
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
                     actualTime = entry.arrivalTime();
@@ -173,17 +199,13 @@ function render(ctx, state, pids) {
                     actualTime = departureTime + deviationMs;
                 }
 
-                // 如果已过到达时间 + 保留期，移除
                 if (currentTime > actualTime + CONFIG.terminatedRetentionMs) {
                     skip = true;
                 } else {
-                    // ★★★ 新增判断：是否已经到达 ★★★
                     if (currentTime >= actualTime) {
-                        // 已经到达终点 → 显示“到达”，绿色
                         status = '到达';
-                        statusColor = 0x00ff44;  // 与“正在检票”相同
+                        statusColor = 0x00ff44;
                     } else {
-                        // 尚未到达，判断正点/晚点
                         if (isRealtime && deviationMs > 60000) {
                             var delayMin = getDelayMinutes(deviationMs);
                             status = '晚点' + delayMin + '分';
@@ -195,7 +217,7 @@ function render(ctx, state, pids) {
                     }
                 }
             }
-            // ---- 非终到列车（正常发车） ----
+            // ---- 非终到列车 ----
             else {
                 var actualDep = departureTime;
                 if (isRealtime) {
@@ -227,20 +249,99 @@ function render(ctx, state, pids) {
 
             if (skip) continue;
 
+            // 生成唯一键
+            var key = makeKey(routeNumber, destination, platform, departureTime);
+            // 如果已经处理过相同键的列车，跳过（去重）
+            if (processedKeys[key]) {
+                if (CONFIG.DEBUG) {
+                    print('去重跳过: ' + key);
+                }
+                continue;
+            }
+            processedKeys[key] = true;
+
+            // 解析车站名称
+            var origin = parseStationName(getOriginStation(entry));
+            var dest = parseStationName(destination);
+            var plat = parseStationName(platform);
+
+            // ---- ★★★ 缓存写入逻辑 ★★★ ----
+            if (status === '停止检票' || status === '到达') {
+                // 检查缓存中是否已有该键的条目
+                var cachedItem = null;
+                for (var c = 0; c < state.cache.length; c++) {
+                    if (state.cache[c].key === key) {
+                        cachedItem = state.cache[c];
+                        break;
+                    }
+                }
+                if (cachedItem) {
+                    // 更新状态和时间戳（保留原有的关键字段不变）
+                    cachedItem.status = status;
+                    cachedItem.statusColor = statusColor;
+                    cachedItem.cacheTime = currentTime;
+                } else {
+                    // 新增缓存项
+                    state.cache.push({
+                        key: key,
+                        routeNumber: routeNumber,
+                        origin: origin,
+                        destination: dest,
+                        departureTime: departureTime,
+                        platform: plat,
+                        status: status,
+                        statusColor: statusColor,
+                        cacheTime: currentTime,
+                    });
+                }
+            }
+
+            // 添加到最终列表
             allTrains.push({
                 routeNumber: routeNumber,
-                origin: parseStationName(getOriginStation(entry)),
-                destination: parseStationName(destination),
+                origin: origin,
+                destination: dest,
                 departureTime: departureTime,
-                platform: parseStationName(platform),
+                platform: plat,
                 status: status,
                 statusColor: statusColor,
                 isTerminating: isTerminating,
+                key: key,
             });
         }
     }
 
-    // ★ 按计划发车时间（departureTime）升序排列
+    // ---- ★★★ 将缓存中的项加入 allTrains ★★★ ----
+    // 但要避免与已处理的键重复
+    for (var cIdx = 0; cIdx < state.cache.length; cIdx++) {
+        var cached = state.cache[cIdx];
+        var key = cached.key;
+
+        // 如果该键已经在 processedKeys 中，说明 arrivals 中已有这条数据，跳过
+        if (processedKeys[key]) continue;
+
+        // 检查缓存项是否仍然有效（未超时）
+        var retention = (cached.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
+        if ((currentTime - cached.cacheTime) > retention) continue;
+
+        // 添加到最终列表
+        allTrains.push({
+            routeNumber: cached.routeNumber,
+            origin: cached.origin,
+            destination: cached.destination,
+            departureTime: cached.departureTime,
+            platform: cached.platform,
+            status: cached.status,
+            statusColor: cached.statusColor,
+            isTerminating: false,
+            key: key,
+        });
+
+        // ★ 标记该键已被处理，避免后续缓存中的重复项再次添加
+        processedKeys[key] = true;
+    }
+
+    // ★ 按计划发车时间升序排列
     allTrains.sort(function(a, b) {
         return a.departureTime - b.departureTime;
     });
@@ -288,6 +389,7 @@ function render(ctx, state, pids) {
             status: ' ',
             statusColor: CONFIG.primaryTextColor,
             isTerminating: false,
+            key: null,
         });
     }
 
@@ -411,6 +513,8 @@ function render(ctx, state, pids) {
         print('dataBottom: ' + dataBottom + ', dividerY: ' + dividerY + ', bottomTextY: ' + bottomTextY);
         print('列宽: ' + colWidths.join(', '));
         print('列间距: ' + colGaps.join(', '));
+        print('缓存大小: ' + state.cache.length);
+        print('处理键数: ' + Object.keys(processedKeys).length);
         var sortedSample = allTrains.slice(0, Math.min(3, allTrains.length));
         for (var s = 0; s < sortedSample.length; s++) {
             print('排序样例 ' + s + ': 车次=' + sortedSample[s].routeNumber + ' 开点=' + new Date(sortedSample[s].departureTime).toLocaleTimeString() + ' 状态=' + sortedSample[s].status);
@@ -424,6 +528,7 @@ function render(ctx, state, pids) {
 
 function create(ctx, state, pids) {
     state._lastDebugTime = 0;
+    state.cache = [];
 }
 
 function dispose(ctx, state, pids) {
