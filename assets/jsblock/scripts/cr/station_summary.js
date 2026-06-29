@@ -6,7 +6,7 @@ var CONFIG = {
     // ----- 颜色配置 -----
     backgroundColor: 0x1a1a3e,      // 屏幕背景色（深蓝紫色）
     primaryTextColor: 0xd0d0d0,     // 普通文字颜色（浅灰色）
-    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）
+    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）—— 如果 showHeader=false，此颜色无效
     rowEvenColor: 0x1e1e4a,         // 偶数行背景色
     rowOddColor: 0x2a2a5a,          // 奇数行背景色
     bottomLeftColor: 0x00ff66,      // 底部左侧标语颜色（亮绿色）
@@ -16,17 +16,18 @@ var CONFIG = {
     removeStationSuffix: true,      // true = 站名去掉“站”字
 
     // ----- ★★★ 状态保留时间（毫秒）★★★ -----
-    departedRetentionMs: 12000,    // 【停止检票】后保留 60000ms = 1分钟（缓存精确控制）
-    terminatedRetentionMs: 12000,  // 【到达】后保留 60000ms = 1分钟（缓存精确控制）
+    departedRetentionMs: 12000,     // 【停止检票】后保留 12000ms = 12秒（测试用，可调大）
+    terminatedRetentionMs: 12000,   // 【到达】后保留 12000ms = 12秒（测试用，可调大）
 
     // ----- 调试 -----
     DEBUG: true,                    // true = 每5秒输出调试信息
 
     // ----- 布局核心参数 -----
     fixedRows: 5,                   // ★ 固定显示行数，不足时用空行补齐
+    showHeader: true,              // ★★★ 新增：true=显示表头，false=隐藏表头且不留空白 ★★★
 
     rowHeight: 16,                  // 每行数据的高度（像素）
-    headerHeight: 22,               // 表头高度（像素）
+    headerHeight: 22,               // 表头高度（像素）—— 仅当 showHeader=true 时有效
     paddingLeft: 8,                 // 表格左侧内边距（像素）
     paddingRight: 12,               // 表格右侧内边距（像素）
 
@@ -107,18 +108,13 @@ function render(ctx, state, pids) {
     // ----- ★★★ 缓存管理 ★★★ -----
     if (!state.cache) state.cache = [];
 
-    // 1. 清理超时的缓存项
     state.cache = state.cache.filter(function(item) {
         var retention = (item.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
         return (currentTime - item.cacheTime) <= retention;
     });
 
-    // 收集列车数据
     var arrivals = pids.arrivals();
     var allTrains = [];
-
-    // 用于记录所有已处理列车的唯一键（避免重复）
-    // ★★★ 使用更可靠的唯一键：车次 + 目的地 + 站台 + 计划时间（只取小时和分钟）★★★
     var processedKeys = {};
 
     // 调试输出
@@ -155,15 +151,13 @@ function render(ctx, state, pids) {
         }
     }
 
-    // ---- 生成唯一键的工具函数 ----
     function makeKey(routeNumber, destination, platform, departureTime) {
-        // 使用计划时间的小时和分钟作为键的一部分，避免因偏差变化导致键变化
         var d = new Date(departureTime);
         var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
         return routeNumber + '|' + destination + '|' + platform + '|' + timeStr;
     }
 
-    // ---- 处理 arrivals 中的数据 ----
+    // 处理 arrivals
     if (arrivals) {
         var count = 0;
         if (typeof arrivals.size === 'function') {
@@ -190,7 +184,6 @@ function render(ctx, state, pids) {
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
 
-            // ---- 终到列车 ----
             if (isTerminating) {
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
@@ -216,9 +209,7 @@ function render(ctx, state, pids) {
                         }
                     }
                 }
-            }
-            // ---- 非终到列车 ----
-            else {
+            } else {
                 var actualDep = departureTime;
                 if (isRealtime) {
                     actualDep = departureTime + deviationMs;
@@ -249,25 +240,18 @@ function render(ctx, state, pids) {
 
             if (skip) continue;
 
-            // 生成唯一键
             var key = makeKey(routeNumber, destination, platform, departureTime);
-            // 如果已经处理过相同键的列车，跳过（去重）
             if (processedKeys[key]) {
-                if (CONFIG.DEBUG) {
-                    print('去重跳过: ' + key);
-                }
+                if (CONFIG.DEBUG) print('去重跳过: ' + key);
                 continue;
             }
             processedKeys[key] = true;
 
-            // 解析车站名称
             var origin = parseStationName(getOriginStation(entry));
             var dest = parseStationName(destination);
             var plat = parseStationName(platform);
 
-            // ---- ★★★ 缓存写入逻辑 ★★★ ----
             if (status === '停止检票' || status === '到达') {
-                // 检查缓存中是否已有该键的条目
                 var cachedItem = null;
                 for (var c = 0; c < state.cache.length; c++) {
                     if (state.cache[c].key === key) {
@@ -276,12 +260,10 @@ function render(ctx, state, pids) {
                     }
                 }
                 if (cachedItem) {
-                    // 更新状态和时间戳（保留原有的关键字段不变）
                     cachedItem.status = status;
                     cachedItem.statusColor = statusColor;
                     cachedItem.cacheTime = currentTime;
                 } else {
-                    // 新增缓存项
                     state.cache.push({
                         key: key,
                         routeNumber: routeNumber,
@@ -296,7 +278,6 @@ function render(ctx, state, pids) {
                 }
             }
 
-            // 添加到最终列表
             allTrains.push({
                 routeNumber: routeNumber,
                 origin: origin,
@@ -311,20 +292,13 @@ function render(ctx, state, pids) {
         }
     }
 
-    // ---- ★★★ 将缓存中的项加入 allTrains ★★★ ----
-    // 但要避免与已处理的键重复
+    // 从缓存添加
     for (var cIdx = 0; cIdx < state.cache.length; cIdx++) {
         var cached = state.cache[cIdx];
         var key = cached.key;
-
-        // 如果该键已经在 processedKeys 中，说明 arrivals 中已有这条数据，跳过
         if (processedKeys[key]) continue;
-
-        // 检查缓存项是否仍然有效（未超时）
         var retention = (cached.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
         if ((currentTime - cached.cacheTime) > retention) continue;
-
-        // 添加到最终列表
         allTrains.push({
             routeNumber: cached.routeNumber,
             origin: cached.origin,
@@ -336,12 +310,9 @@ function render(ctx, state, pids) {
             isTerminating: false,
             key: key,
         });
-
-        // ★ 标记该键已被处理，避免后续缓存中的重复项再次添加
         processedKeys[key] = true;
     }
 
-    // ★ 按计划发车时间升序排列
     allTrains.sort(function(a, b) {
         return a.departureTime - b.departureTime;
     });
@@ -351,6 +322,12 @@ function render(ctx, state, pids) {
     var paddingRight = CONFIG.paddingRight;
     var headerHeight = CONFIG.headerHeight;
     var rowHeight = CONFIG.rowHeight;
+    var showHeader = CONFIG.showHeader;
+
+    // ★★★ 根据 showHeader 决定数据起始 Y 坐标 ★★★
+    // 如果显示表头，数据行从 headerHeight + rowHeight 开始（表头在 headerHeight 处）
+    // 如果不显示表头，数据行从 y=0 开始（不留空白）
+    var dataStartY = showHeader ? headerHeight : 0;
 
     var colWidths = CONFIG.colWidths.slice();
     var colGaps = CONFIG.colGaps.slice();
@@ -397,32 +374,35 @@ function render(ctx, state, pids) {
     //  区域绘制
     // ============================================================
 
-    // 1. 表头区域
-    var headerY = headerHeight;
-    Text.create('header_bg')
-        .text(' ')
-        .pos(0, headerY - 2)
-        .size(screenWidth, rowHeight + 2)
-        .color(CONFIG.headerBgColor)
-        .stretchXY()
-        .draw(ctx);
-
-    var xPos = paddingLeft;
-    for (var h = 0; h < colLabels.length; h++) {
-        Text.create('header_' + colKeys[h])
-            .text(colLabels[h])
-            .pos(xPos, headerY)
-            .color(CONFIG.primaryTextColor)
-            .scale(0.8)
+    // 1. 表头区域（仅当 showHeader = true）
+    var headerY = dataStartY;  // 如果显示表头，headerY = headerHeight；否则为 0
+    if (showHeader) {
+        Text.create('header_bg')
+            .text(' ')
+            .pos(0, headerY - 2)
+            .size(screenWidth, rowHeight + 2)
+            .color(CONFIG.headerBgColor)
+            .stretchXY()
             .draw(ctx);
-        xPos += colWidths[h];
-        if (h < colGaps.length) xPos += colGaps[h];
+
+        var xPos = paddingLeft;
+        for (var h = 0; h < colLabels.length; h++) {
+            Text.create('header_' + colKeys[h])
+                .text(colLabels[h])
+                .pos(xPos, headerY)
+                .color(CONFIG.primaryTextColor)
+                .scale(0.8)
+                .draw(ctx);
+            xPos += colWidths[h];
+            if (h < colGaps.length) xPos += colGaps[h];
+        }
     }
 
-    // 2. 数据行区域（固定行数）
+    // 2. 数据行区域
     for (var idx = 0; idx < displayTrains.length; idx++) {
         var train = displayTrains[idx];
-        var rowY = headerY + rowHeight + idx * rowHeight;
+        // 行 Y 位置 = 数据起始 Y + 表头占用的高度（如果显示表头，则偏移 headerHeight，否则偏移 0）+ idx * rowHeight
+        var rowY = dataStartY + (showHeader ? headerHeight : 0) + idx * rowHeight;
         var bgColor = (idx % 2 === 0) ? CONFIG.rowEvenColor : CONFIG.rowOddColor;
         Text.create('row_bg_' + idx)
             .text(' ')
@@ -463,8 +443,11 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 3. 底部信息区域（紧贴数据行下方）
-    var dataBottom = headerY + rowHeight * (fixedRows + 1);
+    // 3. 底部信息区域
+    // 数据区域底部位置：数据起始 Y + 表头偏移（如果有）+ rowHeight * fixedRows
+    var dataBottom = dataStartY + (showHeader ? headerHeight : 0) + rowHeight * fixedRows;
+    // 为了兼容，我们仍然使用原来的底部计算逻辑，但用新的 dataBottom
+    // 为了保持之前的间距，我们沿用之前的偏移量
     var dividerY = dataBottom + 2;
     var bottomTextY = dividerY + 2 + 3;
 
@@ -519,6 +502,7 @@ function render(ctx, state, pids) {
         for (var s = 0; s < sortedSample.length; s++) {
             print('排序样例 ' + s + ': 车次=' + sortedSample[s].routeNumber + ' 开点=' + new Date(sortedSample[s].departureTime).toLocaleTimeString() + ' 状态=' + sortedSample[s].status);
         }
+        print('表头显示: ' + (showHeader ? '开启' : '关闭'));
     }
 }
 
