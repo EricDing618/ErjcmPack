@@ -1,10 +1,4 @@
 // ============================================================
-//  cr/station_summary.js - 国铁车站总览大屏 (排序修正版)
-//  功能：汇总车站内所有站台的列车信息，按计划发车时间升序排列
-//  特点：固定显示行数，底部信息紧跟数据区域，列宽间距自定义
-// ============================================================
-
-// ============================================================
 //  【配置区】
 // ============================================================
 
@@ -171,6 +165,7 @@ function render(ctx, state, pids) {
 
             // ---- 终到列车 ----
             if (isTerminating) {
+                // 计算实际到达时间
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
                     actualTime = entry.arrivalTime();
@@ -178,20 +173,29 @@ function render(ctx, state, pids) {
                     actualTime = departureTime + deviationMs;
                 }
 
+                // 如果已过到达时间 + 保留期，移除
                 if (currentTime > actualTime + CONFIG.terminatedRetentionMs) {
                     skip = true;
                 } else {
-                    if (isRealtime && deviationMs > 60000) {
-                        var delayMin = getDelayMinutes(deviationMs);
-                        status = '晚点' + delayMin + '分';
-                        statusColor = 0xFF0000;
+                    // ★★★ 新增判断：是否已经到达 ★★★
+                    if (currentTime >= actualTime) {
+                        // 已经到达终点 → 显示“到达”，绿色
+                        status = '到达';
+                        statusColor = 0x00ff44;  // 与“正在检票”相同
                     } else {
-                        status = '正点';
-                        statusColor = 0xFFFF00;
+                        // 尚未到达，判断正点/晚点
+                        if (isRealtime && deviationMs > 60000) {
+                            var delayMin = getDelayMinutes(deviationMs);
+                            status = '晚点' + delayMin + '分';
+                            statusColor = 0xFF0000;
+                        } else {
+                            status = '正点';
+                            statusColor = 0xFFFF00;
+                        }
                     }
                 }
             }
-            // ---- 非终到列车 ----
+            // ---- 非终到列车（正常发车） ----
             else {
                 var actualDep = departureTime;
                 if (isRealtime) {
@@ -227,18 +231,16 @@ function render(ctx, state, pids) {
                 routeNumber: routeNumber,
                 origin: parseStationName(getOriginStation(entry)),
                 destination: parseStationName(destination),
-                departureTime: departureTime,          // 计划发车时间（用于排序）
+                departureTime: departureTime,
                 platform: parseStationName(platform),
                 status: status,
                 statusColor: statusColor,
                 isTerminating: isTerminating,
-                // 保留实际时间用于其他可能的用途，但不用于排序
-                actualTime: (isTerminating ? actualTime : (isRealtime ? departureTime + deviationMs : departureTime)),
             });
         }
     }
 
-    // ★★★ 关键修复：按计划发车时间（departureTime）升序排列 ★★★
+    // ★ 按计划发车时间（departureTime）升序排列
     allTrains.sort(function(a, b) {
         return a.departureTime - b.departureTime;
     });
@@ -281,7 +283,7 @@ function render(ctx, state, pids) {
             routeNumber: '--',
             origin: '--',
             destination: '--',
-            departureTime: 9999999999999, // 空行排最后
+            departureTime: 9999999999999,
             platform: '--',
             status: ' ',
             statusColor: CONFIG.primaryTextColor,
@@ -364,7 +366,6 @@ function render(ctx, state, pids) {
     var dividerY = dataBottom + 2;
     var bottomTextY = dividerY + 2 + 3;
 
-    // 防溢出
     var bottomTextHeight = 14;
     if (bottomTextY + bottomTextHeight > screenHeight) {
         var over = (bottomTextY + bottomTextHeight) - screenHeight;
@@ -376,7 +377,6 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 分隔线
     if (dividerY < screenHeight - 1) {
         Text.create('divider')
             .text(' ')
@@ -387,7 +387,6 @@ function render(ctx, state, pids) {
             .draw(ctx);
     }
 
-    // 底部标语
     Text.create('bottom_left')
         .text(CONFIG.bottomText)
         .pos(tableLeft, bottomTextY)
@@ -396,7 +395,6 @@ function render(ctx, state, pids) {
         .leftAlign()
         .draw(ctx);
 
-    // 底部时间
     var timeStr = getFormattedTime();
     Text.create('bottom_right')
         .text(timeStr)
@@ -413,10 +411,9 @@ function render(ctx, state, pids) {
         print('dataBottom: ' + dataBottom + ', dividerY: ' + dividerY + ', bottomTextY: ' + bottomTextY);
         print('列宽: ' + colWidths.join(', '));
         print('列间距: ' + colGaps.join(', '));
-        // 输出排序后的前几趟车次和时间，方便验证顺序
         var sortedSample = allTrains.slice(0, Math.min(3, allTrains.length));
         for (var s = 0; s < sortedSample.length; s++) {
-            print('排序样例 ' + s + ': 车次=' + sortedSample[s].routeNumber + ' 开点=' + new Date(sortedSample[s].departureTime).toLocaleTimeString());
+            print('排序样例 ' + s + ': 车次=' + sortedSample[s].routeNumber + ' 开点=' + new Date(sortedSample[s].departureTime).toLocaleTimeString() + ' 状态=' + sortedSample[s].status);
         }
     }
 }
