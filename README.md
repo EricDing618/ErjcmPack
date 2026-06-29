@@ -47,9 +47,9 @@
   - MTR 4.0.0prerelease.3
 
 ## 参考链接
-最新版：[https://jcm.joban.org/latest/dev/scripting/type/pids/](https://jcm.joban.org/latest/dev/scripting/type/pids/)  
-[https://www.joban.org/wiki/JCM:Building_a_Scripted_PIDS_Preset](https://www.joban.org/wiki/JCM:Building_a_Scripted_PIDS_Preset)  
-开发参考：[https://jcm.joban.org/v2/dev/pids/](https://jcm.joban.org/v2/dev/pids/)
+- [https://jcm.joban.org/latest/dev/scripting/type/pids/](https://jcm.joban.org/latest/dev/scripting/type/pids/)  
+- [https://www.joban.org/wiki/JCM:Building_a_Scripted_PIDS_Preset](https://www.joban.org/wiki/JCM:Building_a_Scripted_PIDS_Preset)  
+- [https://jcm.joban.org/v2/dev/pids/](https://jcm.joban.org/v2/dev/pids/)
 
 
 ### 使用了~~亿点点~~DeepSeek
