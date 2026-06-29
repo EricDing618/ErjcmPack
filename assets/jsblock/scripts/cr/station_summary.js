@@ -6,7 +6,7 @@ var CONFIG = {
     // ----- 颜色配置 -----
     backgroundColor: 0x1a1a3e,      // 屏幕背景色（深蓝紫色）
     primaryTextColor: 0xd0d0d0,     // 普通文字颜色（浅灰色）
-    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）—— 如果 showHeader=false，此颜色无效
+    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）
     rowEvenColor: 0x1e1e4a,         // 偶数行背景色
     rowOddColor: 0x2a2a5a,          // 奇数行背景色
     bottomLeftColor: 0x00ff66,      // 底部左侧标语颜色（亮绿色）
@@ -24,7 +24,8 @@ var CONFIG = {
 
     // ----- 布局核心参数 -----
     fixedRows: 5,                   // ★ 固定显示行数，不足时用空行补齐
-    showHeader: true,               // ★★★ true=显示表头（从顶部开始），false=隐藏表头且数据行从顶部开始
+    // ★★★ showHeader 现在由第一行的隐藏状态动态控制，此处仅作默认值（当无法读取时使用）★★★
+    showHeader: true,
 
     rowHeight: 16,                  // 每行数据的高度（像素）
     headerHeight: 22,               // 表头高度（像素）—— 当 showHeader=true 时，表头占用此高度并从 y=0 开始
@@ -40,13 +41,15 @@ var CONFIG = {
     // ★★★ 整行着色开关 ★★★
     rowColorByStatus: true,         // true = 整行文字跟随状态颜色
 
-    // ----- 底部信息 -----
-    bottomText: '开车前10分钟检票，前3分钟停止检票',
-    bottomTextScale: 0.55,
+    // ----- 底部信息（支持动态控制）-----
+    bottomText: '开车前10分钟检票，前3分钟停止检票',  // 默认标语（当第四行自定义消息为空时使用）
+    bottomTextScale: 0.55,          // 底部文字缩放
+    bottomTextMarqueeThreshold: 20, // ★ 标语字符数达到此值时启用走马灯
+    bottomTimeWidthEstimate: 120,   // ★ 预估时间区域的宽度（像素），用于走马灯避让
 };
 
 // ============================================================
-//  工具函数
+//  工具函数（保持不变）
 // ============================================================
 
 function parseStationName(name) {
@@ -105,7 +108,12 @@ function render(ctx, state, pids) {
         .stretchXY()
         .draw(ctx);
 
-    // ----- ★★★ 缓存管理 ★★★ -----
+    // ----- ★★★ 动态控制表头显示 ★★★ -----
+    // 第一行（索引0）的隐藏状态决定是否显示表头
+    var hideRow0 = pids.isRowHidden(0);
+    var showHeader = !hideRow0;   // 若隐藏，则不显示表头
+
+    // ----- 缓存管理（同前）-----
     if (!state.cache) state.cache = [];
 
     state.cache = state.cache.filter(function(item) {
@@ -148,6 +156,7 @@ function render(ctx, state, pids) {
             }
             print('===== 调试结束 =====');
             print('缓存大小: ' + state.cache.length);
+            print('表头显示(动态): ' + (showHeader ? '开启' : '关闭（第一行隐藏）'));
         }
     }
 
@@ -157,7 +166,7 @@ function render(ctx, state, pids) {
         return routeNumber + '|' + destination + '|' + platform + '|' + timeStr;
     }
 
-    // 处理 arrivals
+    // 处理 arrivals（同前）
     if (arrivals) {
         var count = 0;
         if (typeof arrivals.size === 'function') {
@@ -317,15 +326,11 @@ function render(ctx, state, pids) {
         return a.departureTime - b.departureTime;
     });
 
-    // ----- 固定列宽布局 -----
+    // ----- 固定列宽布局（同前）-----
     var paddingLeft = CONFIG.paddingLeft;
     var paddingRight = CONFIG.paddingRight;
     var headerHeight = CONFIG.headerHeight;
     var rowHeight = CONFIG.rowHeight;
-    var showHeader = CONFIG.showHeader;
-
-    // ★★★ 所有内容从顶部开始，y=0 ★★★
-    var contentStartY = 0;   // 内容起始位置，始终为0
 
     var colWidths = CONFIG.colWidths.slice();
     var colGaps = CONFIG.colGaps.slice();
@@ -372,22 +377,20 @@ function render(ctx, state, pids) {
     //  区域绘制
     // ============================================================
 
-    // 1. 表头区域（如果启用）
+    // 1. 表头区域（根据动态 showHeader）
     if (showHeader) {
-        // 表头从 y=0 开始
         var headerY = 0;
         Text.create('header_bg')
             .text(' ')
             .pos(0, headerY)
-            .size(screenWidth, headerHeight)   // 高度使用 headerHeight
+            .size(screenWidth, headerHeight)
             .color(CONFIG.headerBgColor)
             .stretchXY()
             .draw(ctx);
 
         var xPos = paddingLeft;
         for (var h = 0; h < colLabels.length; h++) {
-            // 表头文字垂直居中（简单偏移）
-            var textY = headerY + (headerHeight - rowHeight) / 2 + 2; // 近似居中
+            var textY = headerY + (headerHeight - rowHeight) / 2 + 2;
             Text.create('header_' + colKeys[h])
                 .text(colLabels[h])
                 .pos(xPos, textY)
@@ -400,7 +403,6 @@ function render(ctx, state, pids) {
     }
 
     // 2. 数据行区域
-    // 数据行起始 Y = 表头占用的高度（如果显示表头则 headerHeight，否则 0）
     var dataStartY = showHeader ? headerHeight : 0;
 
     for (var idx = 0; idx < displayTrains.length; idx++) {
@@ -446,64 +448,112 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 3. 底部信息区域
-    // 数据区域底部 = dataStartY + fixedRows * rowHeight
-    var dataBottom = dataStartY + fixedRows * rowHeight;
-    var dividerY = dataBottom + 2;
-    var bottomTextY = dividerY + 2 + 3;
+    // 3. 底部信息区域（动态控制）
+    // ★★★ 第四行（索引3）的隐藏状态决定是否显示底部文字 ★★★
+    var hideRow3 = pids.isRowHidden(3);
+    var customMsg3 = pids.getCustomMessage(3);
 
-    var bottomTextHeight = 14;
-    if (bottomTextY + bottomTextHeight > screenHeight) {
-        var over = (bottomTextY + bottomTextHeight) - screenHeight;
-        bottomTextY -= over;
-        dividerY -= over;
-        if (dividerY < dataBottom + 1) {
-            dividerY = dataBottom + 1;
-            bottomTextY = dividerY + 2 + 3;
+    // 决定底部显示的文字
+    var bottomDisplayText = '';
+    if (!hideRow3) {
+        // 若未隐藏，优先使用自定义消息，否则使用默认标语
+        if (customMsg3 && customMsg3.trim() !== '') {
+            bottomDisplayText = customMsg3;
+        } else {
+            bottomDisplayText = CONFIG.bottomText;
         }
     }
 
-    if (dividerY < screenHeight - 1) {
-        Text.create('divider')
-            .text(' ')
-            .pos(tableLeft, dividerY)
-            .size(tableRight - tableLeft, 2)
-            .color(0x444466)
-            .stretchXY()
+    // 只有未隐藏且有文字时才绘制底部区域
+    var dataBottom = dataStartY + fixedRows * rowHeight;
+    if (bottomDisplayText && bottomDisplayText.trim() !== '') {
+        // 绘制分隔线
+        var dividerY = dataBottom + 2;
+        var bottomTextY = dividerY + 2 + 3;
+        var bottomTextHeight = 14;
+
+        if (bottomTextY + bottomTextHeight > screenHeight) {
+            var over = (bottomTextY + bottomTextHeight) - screenHeight;
+            bottomTextY -= over;
+            dividerY -= over;
+            if (dividerY < dataBottom + 1) {
+                dividerY = dataBottom + 1;
+                bottomTextY = dividerY + 2 + 3;
+            }
+        }
+
+        if (dividerY < screenHeight - 1) {
+            Text.create('divider')
+                .text(' ')
+                .pos(tableLeft, dividerY)
+                .size(tableRight - tableLeft, 2)
+                .color(0x444466)
+                .stretchXY()
+                .draw(ctx);
+        }
+
+        // --- 绘制时间（右对齐）---
+        var timeStr = getFormattedTime();
+        Text.create('bottom_right')
+            .text(timeStr)
+            .pos(tableRight, bottomTextY)
+            .color(CONFIG.bottomRightColor)
+            .scale(CONFIG.bottomTextScale)
+            .rightAlign()
             .draw(ctx);
+
+        // --- 绘制标语（左对齐或走马灯）---
+        var textLen = bottomDisplayText.length;
+        var useMarquee = (textLen >= CONFIG.bottomTextMarqueeThreshold);
+
+        if (!useMarquee) {
+            // 普通左对齐
+            Text.create('bottom_left')
+                .text(bottomDisplayText)
+                .pos(tableLeft, bottomTextY)
+                .color(CONFIG.bottomLeftColor)
+                .scale(CONFIG.bottomTextScale)
+                .leftAlign()
+                .draw(ctx);
+        } else {
+            // 走马灯：区域左边界 tableLeft，右边界 = tableRight - 时间估计宽度 - 间距
+            var timeWidthEst = CONFIG.bottomTimeWidthEstimate;
+            var marqueeRight = tableRight - timeWidthEst - 6; // 留6像素间距
+            var marqueeWidth = marqueeRight - tableLeft;
+            if (marqueeWidth < 20) marqueeWidth = 20; // 最小宽度
+
+            Text.create('bottom_left_marquee')
+                .text(bottomDisplayText)
+                .pos(tableLeft, bottomTextY)
+                .size(marqueeWidth, bottomTextHeight)
+                .color(CONFIG.bottomLeftColor)
+                .scale(CONFIG.bottomTextScale)
+                .leftAlign()
+                .marquee()
+                .draw(ctx);
+        }
+    } else {
+        // 如果底部文字为空（隐藏或空字符串），不绘制任何底部内容
+        // 但数据区域底部仍然保留，不加分隔线
+        // 无需额外操作
     }
-
-    Text.create('bottom_left')
-        .text(CONFIG.bottomText)
-        .pos(tableLeft, bottomTextY)
-        .color(CONFIG.bottomLeftColor)
-        .scale(CONFIG.bottomTextScale)
-        .leftAlign()
-        .draw(ctx);
-
-    var timeStr = getFormattedTime();
-    Text.create('bottom_right')
-        .text(timeStr)
-        .pos(tableRight, bottomTextY)
-        .color(CONFIG.bottomRightColor)
-        .scale(CONFIG.bottomTextScale)
-        .rightAlign()
-        .draw(ctx);
 
     // 调试输出
     if (CONFIG.DEBUG) {
         print('固定行数: ' + fixedRows + ' / 实际数据: ' + allTrains.length);
         print('屏幕高度: ' + screenHeight);
-        print('dataBottom: ' + dataBottom + ', dividerY: ' + dividerY + ', bottomTextY: ' + bottomTextY);
+        print('dataBottom: ' + dataBottom);
         print('列宽: ' + colWidths.join(', '));
         print('列间距: ' + colGaps.join(', '));
         print('缓存大小: ' + state.cache.length);
         print('处理键数: ' + Object.keys(processedKeys).length);
+        print('表头显示(动态): ' + (showHeader ? '开启' : '关闭'));
+        print('底部文字: ' + (bottomDisplayText || '(空)'));
+        print('底部文字长度: ' + bottomDisplayText.length + '，走马灯: ' + (useMarquee ? '是' : '否'));
         var sortedSample = allTrains.slice(0, Math.min(3, allTrains.length));
         for (var s = 0; s < sortedSample.length; s++) {
             print('排序样例 ' + s + ': 车次=' + sortedSample[s].routeNumber + ' 开点=' + new Date(sortedSample[s].departureTime).toLocaleTimeString() + ' 状态=' + sortedSample[s].status);
         }
-        print('表头显示: ' + (showHeader ? '开启' : '关闭'));
     }
 }
 
