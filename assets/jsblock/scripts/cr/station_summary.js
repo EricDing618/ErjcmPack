@@ -1,7 +1,7 @@
 // ============================================================
-//  cr/station_summary.js - 国铁车站总览大屏 (真实国铁版)
-//  功能：汇总车站内所有站台的列车信息，按发车时间升序排列
-//  特点：终到列车也参与正点/晚点判断，不单独显示"终到"
+//  cr/station_summary.js - 国铁车站总览大屏 (排序修正版)
+//  功能：汇总车站内所有站台的列车信息，按计划发车时间升序排列
+//  特点：固定显示行数，底部信息紧跟数据区域，列宽间距自定义
 // ============================================================
 
 // ============================================================
@@ -14,12 +14,35 @@ var CONFIG = {
     headerBgColor: 0x0d0d2b,
     rowEvenColor: 0x1e1e4a,
     rowOddColor: 0x2a2a5a,
+    bottomLeftColor: 0x00ff66,
+    bottomRightColor: 0xff4444,
     removeStationSuffix: true,
-    departedRetentionMs: 120000,      // 停止检票后保留2分钟
-    terminatedRetentionMs: 120000,    // 终到后保留2分钟
+    departedRetentionMs: 120000,
+    terminatedRetentionMs: 120000,
     DEBUG: true,
-    minRows: 3,
-    columnSpacing: 30,
+
+    // ★ 固定显示行数
+    fixedRows: 5,
+
+    // ★ 行高和表头高度
+    rowHeight: 16,
+    headerHeight: 22,
+    paddingLeft: 8,
+    paddingRight: 12,
+
+    // ★ 底部信息与数据区域底部之间的间距（像素）
+    bottomOffset: 4,
+
+    // ★ 固定列宽和间距
+    colWidths: [50, 110, 110, 45, 35, 55],
+    colGaps: [25, 25, 20, 20, 20],
+
+    // ★ 整行着色
+    rowColorByStatus: true,
+
+    // ★ 底部文字
+    bottomText: '开车前10分钟检票，前3分钟停止检票',
+    bottomTextScale: 0.55,
 };
 
 // ============================================================
@@ -50,6 +73,13 @@ function getOriginStation(arrival) {
         print('获取始发站失败: ' + e);
         return '未知';
     }
+}
+
+function getFormattedTime() {
+    var now = new Date();
+    var pad = function(n) { return String(n).padStart(2, '0'); };
+    return now.getFullYear() + '/' + pad(now.getMonth() + 1) + '/' + pad(now.getDate()) +
+        ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
 }
 
 function getDelayMinutes(deviationMs) {
@@ -128,7 +158,7 @@ function render(ctx, state, pids) {
             if (!entry) continue;
 
             var destination = entry.destination() || '';
-            var departureTime = entry.departureTime();      // 终到列车：计划到达时间
+            var departureTime = entry.departureTime();
             var deviationMs = entry.deviation() || 0;
             var isRealtime = entry.realtime();
             var isTerminating = entry.terminating();
@@ -140,10 +170,7 @@ function render(ctx, state, pids) {
             var skip = false;
 
             // ---- 终到列车 ----
-            // 使用到达时间作为基准，判断正点/晚点
-            // 不显示"终到"状态，而是像普通列车一样显示正点或晚点
             if (isTerminating) {
-                // 计算实际到达时间
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
                     actualTime = entry.arrivalTime();
@@ -151,11 +178,9 @@ function render(ctx, state, pids) {
                     actualTime = departureTime + deviationMs;
                 }
 
-                // 如果已过到达时间 + 保留期，移除
                 if (currentTime > actualTime + CONFIG.terminatedRetentionMs) {
                     skip = true;
                 } else {
-                    // 判断晚点：偏差 > 1分钟
                     if (isRealtime && deviationMs > 60000) {
                         var delayMin = getDelayMinutes(deviationMs);
                         status = '晚点' + delayMin + '分';
@@ -166,14 +191,13 @@ function render(ctx, state, pids) {
                     }
                 }
             }
-            // ---- 非终到列车（正常发车） ----
+            // ---- 非终到列车 ----
             else {
                 var actualDep = departureTime;
                 if (isRealtime) {
                     actualDep = departureTime + deviationMs;
                 }
 
-                // 已发车 → 停止检票（红色）
                 if (currentTime > actualDep) {
                     if (currentTime <= actualDep + CONFIG.departedRetentionMs) {
                         status = '停止检票';
@@ -181,24 +205,16 @@ function render(ctx, state, pids) {
                     } else {
                         skip = true;
                     }
-                }
-                // 未发车
-                else {
+                } else {
                     var remaining = actualDep - currentTime;
-
-                    // 晚点（偏差>1分钟）→ 红色
                     if (isRealtime && deviationMs > 60000) {
                         var delayMin = getDelayMinutes(deviationMs);
                         status = '晚点' + delayMin + '分';
                         statusColor = 0xFF0000;
-                    } 
-                    // 1分钟内发车 → 正在检票（绿色）
-                    else if (remaining <= 60000) {
+                    } else if (remaining <= 60000) {
                         status = '正在检票';
                         statusColor = 0x00ff44;
-                    } 
-                    // 其他所有情况 → 正点（黄色）
-                    else {
+                    } else {
                         status = '正点';
                         statusColor = 0xFFFF00;
                     }
@@ -207,63 +223,77 @@ function render(ctx, state, pids) {
 
             if (skip) continue;
 
-            // 对于终到列车，"开点"列显示计划到达时间
-            // 对于普通列车，"开点"列显示计划发车时间
-            var displayTime = departureTime;
-
             allTrains.push({
                 routeNumber: routeNumber,
                 origin: parseStationName(getOriginStation(entry)),
                 destination: parseStationName(destination),
-                departureTime: displayTime,
-                actualDeparture: (isTerminating ? actualTime : (isRealtime ? departureTime + deviationMs : departureTime)),
+                departureTime: departureTime,          // 计划发车时间（用于排序）
                 platform: parseStationName(platform),
                 status: status,
                 statusColor: statusColor,
                 isTerminating: isTerminating,
+                // 保留实际时间用于其他可能的用途，但不用于排序
+                actualTime: (isTerminating ? actualTime : (isRealtime ? departureTime + deviationMs : departureTime)),
             });
         }
     }
 
+    // ★★★ 关键修复：按计划发车时间（departureTime）升序排列 ★★★
     allTrains.sort(function(a, b) {
-        return a.actualDeparture - b.actualDeparture;
+        return a.departureTime - b.departureTime;
     });
 
-    // ----- 布局参数 -----
-    var paddingLeft = 8;
-    var paddingRight = 12;
-    var headerHeight = 22;
-    var rowHeight = 14;
-    var paddingTop = 4;
+    // ----- 固定列宽布局 -----
+    var paddingLeft = CONFIG.paddingLeft;
+    var paddingRight = CONFIG.paddingRight;
+    var headerHeight = CONFIG.headerHeight;
+    var rowHeight = CONFIG.rowHeight;
 
-    // 列权重（车次:始发:终到:时间:站台:状态）
-    var colWeights = [45, 75, 75, 55, 40, 55];
-    var weightSum = colWeights.reduce(function(a, b) { return a + b; }, 0);
+    var colWidths = CONFIG.colWidths.slice();
+    var colGaps = CONFIG.colGaps.slice();
 
-    var columnCount = colWeights.length;
-    var totalSpacing = (columnCount - 1) * CONFIG.columnSpacing;
-    var availableWidth = screenWidth - paddingLeft - paddingRight - totalSpacing;
+    var totalColWidth = 0;
+    for (var i = 0; i < colWidths.length; i++) totalColWidth += colWidths[i];
+    var totalGaps = 0;
+    for (var i = 0; i < colGaps.length; i++) totalGaps += colGaps[i];
 
-    var colRoute = Math.floor(availableWidth * colWeights[0] / weightSum);
-    var colOrigin = Math.floor(availableWidth * colWeights[1] / weightSum);
-    var colDest = Math.floor(availableWidth * colWeights[2] / weightSum);
-    var colTime = Math.floor(availableWidth * colWeights[3] / weightSum);
-    var colPlatform = Math.floor(availableWidth * colWeights[4] / weightSum);
-    var colStatus = availableWidth - (colRoute + colOrigin + colDest + colTime + colPlatform);
+    var availableWidth = screenWidth - paddingLeft - paddingRight;
+    var neededWidth = totalColWidth + totalGaps;
+    var scale = 1.0;
+    if (neededWidth > availableWidth) {
+        scale = availableWidth / neededWidth;
+        for (var i = 0; i < colWidths.length; i++) colWidths[i] = Math.floor(colWidths[i] * scale);
+        totalColWidth = 0;
+        for (var i = 0; i < colWidths.length; i++) totalColWidth += colWidths[i];
+        neededWidth = totalColWidth + totalGaps;
+    }
 
-    var colWidths = [colRoute, colOrigin, colDest, colTime, colPlatform, colStatus];
+    var tableLeft = paddingLeft;
+    var tableRight = paddingLeft + neededWidth;
+
     var colLabels = ['车次', '始发站', '终到站', '开点', '站台', '状态'];
     var colKeys = ['route', 'origin', 'dest', 'time', 'platform', 'status'];
 
-    var tableLeft = paddingLeft;
-    var tableRight = paddingLeft + availableWidth + totalSpacing;
+    var fixedRows = CONFIG.fixedRows;
+    var displayTrains = allTrains.slice(0, fixedRows);
+    while (displayTrains.length < fixedRows) {
+        displayTrains.push({
+            routeNumber: '--',
+            origin: '--',
+            destination: '--',
+            departureTime: 9999999999999, // 空行排最后
+            platform: '--',
+            status: ' ',
+            statusColor: CONFIG.primaryTextColor,
+            isTerminating: false,
+        });
+    }
 
-    // 计算最大行数（无底部）
-    var maxRows = Math.floor((screenHeight - headerHeight - paddingTop) / rowHeight);
-    if (maxRows < CONFIG.minRows) maxRows = CONFIG.minRows;
-    if (maxRows > allTrains.length) maxRows = allTrains.length;
+    // ============================================================
+    //  区域绘制
+    // ============================================================
 
-    // ----- 表头 -----
+    // 1. 表头区域
     var headerY = headerHeight;
     Text.create('header_bg')
         .text(' ')
@@ -281,14 +311,14 @@ function render(ctx, state, pids) {
             .color(CONFIG.primaryTextColor)
             .scale(0.8)
             .draw(ctx);
-        xPos += colWidths[h] + CONFIG.columnSpacing;
+        xPos += colWidths[h];
+        if (h < colGaps.length) xPos += colGaps[h];
     }
 
-    // ----- 数据行 -----
-    var displayTrains = allTrains.slice(0, maxRows);
+    // 2. 数据行区域（固定行数）
     for (var idx = 0; idx < displayTrains.length; idx++) {
         var train = displayTrains[idx];
-        var rowY = headerHeight + rowHeight + idx * rowHeight;
+        var rowY = headerY + rowHeight + idx * rowHeight;
         var bgColor = (idx % 2 === 0) ? CONFIG.rowEvenColor : CONFIG.rowOddColor;
         Text.create('row_bg_' + idx)
             .text(' ')
@@ -301,8 +331,8 @@ function render(ctx, state, pids) {
         var x = paddingLeft;
         var rowData = [
             (train.routeNumber || '--').slice(0, 6),
-            (train.origin || '--').slice(0, 8),
-            (train.destination || '--').slice(0, 8),
+            (train.origin || '--').slice(0, 10),
+            (train.destination || '--').slice(0, 10),
             (function() {
                 var d = new Date(train.departureTime);
                 return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
@@ -312,21 +342,82 @@ function render(ctx, state, pids) {
         ];
 
         for (var d = 0; d < rowData.length; d++) {
-            var color = (d === 5) ? train.statusColor : CONFIG.primaryTextColor;
+            var color;
+            if (CONFIG.rowColorByStatus) {
+                color = train.statusColor;
+            } else {
+                color = (d === 5) ? train.statusColor : CONFIG.primaryTextColor;
+            }
             Text.create('row_' + idx + '_' + colKeys[d])
                 .text(rowData[d])
                 .pos(x, rowY)
                 .color(color)
                 .scale(0.75)
                 .draw(ctx);
-            x += colWidths[d] + CONFIG.columnSpacing;
+            x += colWidths[d];
+            if (d < colGaps.length) x += colGaps[d];
         }
     }
 
+    // 3. 底部信息区域（紧贴数据行下方）
+    var dataBottom = headerY + rowHeight * (fixedRows + 1);
+    var dividerY = dataBottom + 2;
+    var bottomTextY = dividerY + 2 + 3;
+
+    // 防溢出
+    var bottomTextHeight = 14;
+    if (bottomTextY + bottomTextHeight > screenHeight) {
+        var over = (bottomTextY + bottomTextHeight) - screenHeight;
+        bottomTextY -= over;
+        dividerY -= over;
+        if (dividerY < dataBottom + 1) {
+            dividerY = dataBottom + 1;
+            bottomTextY = dividerY + 2 + 3;
+        }
+    }
+
+    // 分隔线
+    if (dividerY < screenHeight - 1) {
+        Text.create('divider')
+            .text(' ')
+            .pos(tableLeft, dividerY)
+            .size(tableRight - tableLeft, 2)
+            .color(0x444466)
+            .stretchXY()
+            .draw(ctx);
+    }
+
+    // 底部标语
+    Text.create('bottom_left')
+        .text(CONFIG.bottomText)
+        .pos(tableLeft, bottomTextY)
+        .color(CONFIG.bottomLeftColor)
+        .scale(CONFIG.bottomTextScale)
+        .leftAlign()
+        .draw(ctx);
+
+    // 底部时间
+    var timeStr = getFormattedTime();
+    Text.create('bottom_right')
+        .text(timeStr)
+        .pos(tableRight, bottomTextY)
+        .color(CONFIG.bottomRightColor)
+        .scale(CONFIG.bottomTextScale)
+        .rightAlign()
+        .draw(ctx);
+
     // 调试输出
     if (CONFIG.DEBUG) {
-        print('显示行数: ' + displayTrains.length + ' / 最大行数: ' + maxRows);
-        print('列宽: 车次=' + colRoute + ' 始发=' + colOrigin + ' 终到=' + colDest + ' 时间=' + colTime + ' 站台=' + colPlatform + ' 状态=' + colStatus);
+        print('固定行数: ' + fixedRows + ' / 实际数据: ' + allTrains.length);
+        print('屏幕高度: ' + screenHeight);
+        print('dataBottom: ' + dataBottom + ', dividerY: ' + dividerY + ', bottomTextY: ' + bottomTextY);
+        print('列宽: ' + colWidths.join(', '));
+        print('列间距: ' + colGaps.join(', '));
+        // 输出排序后的前几趟车次和时间，方便验证顺序
+        var sortedSample = allTrains.slice(0, Math.min(3, allTrains.length));
+        for (var s = 0; s < sortedSample.length; s++) {
+            print('排序样例 ' + s + ': 车次=' + sortedSample[s].routeNumber + ' 开点=' + new Date(sortedSample[s].departureTime).toLocaleTimeString());
+        }
     }
 }
 
