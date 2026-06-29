@@ -24,10 +24,10 @@ var CONFIG = {
 
     // ----- 布局核心参数 -----
     fixedRows: 5,                   // ★ 固定显示行数，不足时用空行补齐
-    showHeader: true,              // ★★★ 新增：true=显示表头，false=隐藏表头且不留空白 ★★★
+    showHeader: true,               // ★★★ true=显示表头（从顶部开始），false=隐藏表头且数据行从顶部开始
 
     rowHeight: 16,                  // 每行数据的高度（像素）
-    headerHeight: 22,               // 表头高度（像素）—— 仅当 showHeader=true 时有效
+    headerHeight: 22,               // 表头高度（像素）—— 当 showHeader=true 时，表头占用此高度并从 y=0 开始
     paddingLeft: 8,                 // 表格左侧内边距（像素）
     paddingRight: 12,               // 表格右侧内边距（像素）
 
@@ -324,10 +324,8 @@ function render(ctx, state, pids) {
     var rowHeight = CONFIG.rowHeight;
     var showHeader = CONFIG.showHeader;
 
-    // ★★★ 根据 showHeader 决定数据起始 Y 坐标 ★★★
-    // 如果显示表头，数据行从 headerHeight + rowHeight 开始（表头在 headerHeight 处）
-    // 如果不显示表头，数据行从 y=0 开始（不留空白）
-    var dataStartY = showHeader ? headerHeight : 0;
+    // ★★★ 所有内容从顶部开始，y=0 ★★★
+    var contentStartY = 0;   // 内容起始位置，始终为0
 
     var colWidths = CONFIG.colWidths.slice();
     var colGaps = CONFIG.colGaps.slice();
@@ -374,22 +372,25 @@ function render(ctx, state, pids) {
     //  区域绘制
     // ============================================================
 
-    // 1. 表头区域（仅当 showHeader = true）
-    var headerY = dataStartY;  // 如果显示表头，headerY = headerHeight；否则为 0
+    // 1. 表头区域（如果启用）
     if (showHeader) {
+        // 表头从 y=0 开始
+        var headerY = 0;
         Text.create('header_bg')
             .text(' ')
-            .pos(0, headerY - 2)
-            .size(screenWidth, rowHeight + 2)
+            .pos(0, headerY)
+            .size(screenWidth, headerHeight)   // 高度使用 headerHeight
             .color(CONFIG.headerBgColor)
             .stretchXY()
             .draw(ctx);
 
         var xPos = paddingLeft;
         for (var h = 0; h < colLabels.length; h++) {
+            // 表头文字垂直居中（简单偏移）
+            var textY = headerY + (headerHeight - rowHeight) / 2 + 2; // 近似居中
             Text.create('header_' + colKeys[h])
                 .text(colLabels[h])
-                .pos(xPos, headerY)
+                .pos(xPos, textY)
                 .color(CONFIG.primaryTextColor)
                 .scale(0.8)
                 .draw(ctx);
@@ -399,10 +400,12 @@ function render(ctx, state, pids) {
     }
 
     // 2. 数据行区域
+    // 数据行起始 Y = 表头占用的高度（如果显示表头则 headerHeight，否则 0）
+    var dataStartY = showHeader ? headerHeight : 0;
+
     for (var idx = 0; idx < displayTrains.length; idx++) {
         var train = displayTrains[idx];
-        // 行 Y 位置 = 数据起始 Y + 表头占用的高度（如果显示表头，则偏移 headerHeight，否则偏移 0）+ idx * rowHeight
-        var rowY = dataStartY + (showHeader ? headerHeight : 0) + idx * rowHeight;
+        var rowY = dataStartY + idx * rowHeight;
         var bgColor = (idx % 2 === 0) ? CONFIG.rowEvenColor : CONFIG.rowOddColor;
         Text.create('row_bg_' + idx)
             .text(' ')
@@ -444,10 +447,8 @@ function render(ctx, state, pids) {
     }
 
     // 3. 底部信息区域
-    // 数据区域底部位置：数据起始 Y + 表头偏移（如果有）+ rowHeight * fixedRows
-    var dataBottom = dataStartY + (showHeader ? headerHeight : 0) + rowHeight * fixedRows;
-    // 为了兼容，我们仍然使用原来的底部计算逻辑，但用新的 dataBottom
-    // 为了保持之前的间距，我们沿用之前的偏移量
+    // 数据区域底部 = dataStartY + fixedRows * rowHeight
+    var dataBottom = dataStartY + fixedRows * rowHeight;
     var dividerY = dataBottom + 2;
     var bottomTextY = dividerY + 2 + 3;
 
