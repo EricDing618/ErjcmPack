@@ -1,8 +1,8 @@
 // ============================================================
-//  station_summary.js - 国铁车站总览大屏（缓存过滤修复版）
+//  station_summary.js - 国铁车站总览大屏（站名截断版）
 //  功能：汇总列车信息，动态行数，底部标语+时间
-//  特性：第一行可隐藏始发本站列车并转换状态，第二行可隐藏终到本站列车并转换状态
-//  修复：缓存中的列车也应用过滤和状态转换
+//  特性：第一行可隐藏始发本站列车，第二行可隐藏终到本站列车
+//  新增：站名长度超过阈值时自动截断并显示“...”
 // ============================================================
 
 var CONFIG = {
@@ -29,7 +29,18 @@ var CONFIG = {
     rowColorByStatus: true,
     bottomText: '开车前10分钟检票，前3分钟停止检票',
     bottomTextScale: 0.55,
+    // ★ 站名截断阈值：超过此长度则显示“...”
+    maxStationNameLength: 6,
 };
+
+// ---- 截断函数 ----
+function truncateName(name, maxLen) {
+    if (!name || name === '') return name;
+    if (name.length <= maxLen) return name;
+    // 保留至少 1 个字符 + "..."
+    var keep = Math.max(1, maxLen - 3);
+    return name.substring(0, keep) + '...';
+}
 
 function parseStationName(name) {
     if (name == null || name === '') return '';
@@ -96,13 +107,11 @@ function render(ctx, state, pids) {
         if (!isNaN(num) && num > 0) fixedRows = num;
     }
 
-    // ---- ★ 读取第一、二行自定义消息（功能开关） ----
     var customMsg0 = (pids.getCustomMessage(0) || '').toLowerCase();
     var customMsg1 = (pids.getCustomMessage(1) || '').toLowerCase();
     var enableHideOrigin = (customMsg0.indexOf('true') !== -1);
     var enableHideDest   = (customMsg1.indexOf('true') !== -1);
 
-    // 本站名称（去掉“站”后缀）
     var stationObj = pids.station();
     var stationName = stationObj ? parseStationName(stationObj.getName()) : '';
 
@@ -161,7 +170,7 @@ function render(ctx, state, pids) {
         return routeNumber + '|' + destination + '|' + platform + '|' + timeStr;
     }
 
-    // ---- 处理 arrivals ----
+    // 处理 arrivals
     if (arrivals) {
         var count = 0;
         try {
@@ -188,7 +197,6 @@ function render(ctx, state, pids) {
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
 
-            // ---- 状态判定 ----
             if (isTerminating) {
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
@@ -241,22 +249,13 @@ function render(ctx, state, pids) {
 
             if (skip) continue;
 
-            // ---- 解析站名 ----
             var origin = parseStationName(getOriginStation(entry));
             var dest = parseStationName(destination);
             var plat = parseStationName(platform);
 
-            // ---- ★ 第一行：隐藏始发本站 ----
-            if (enableHideOrigin && origin === stationName) {
-                continue;
-            }
+            if (enableHideOrigin && origin === stationName) continue;
+            if (enableHideDest && dest === stationName) continue;
 
-            // ---- ★ 第二行：隐藏终到本站 ----
-            if (enableHideDest && dest === stationName) {
-                continue;
-            }
-
-            // ---- ★ 状态转换 ----
             if (enableHideOrigin && status === '正在检票') {
                 status = '到达';
                 statusColor = 0x00ff44;
@@ -270,7 +269,6 @@ function render(ctx, state, pids) {
             if (processedKeys[key]) continue;
             processedKeys[key] = true;
 
-            // ---- 写入缓存 ----
             if (status === '停止检票' || status === '到达') {
                 var cachedItem = null;
                 for (var c = 0; c < state.cache.length; c++) {
@@ -312,21 +310,17 @@ function render(ctx, state, pids) {
         }
     }
 
-    // ---- ★ 从缓存添加（应用过滤和状态转换） ----
+    // 从缓存添加（同样应用过滤和状态转换）
     for (var cIdx = 0; cIdx < state.cache.length; cIdx++) {
         var cached = state.cache[cIdx];
         var key = cached.key;
         if (processedKeys[key]) continue;
-
-        // 检查是否超时
         var retention = (cached.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
         if ((currentTime - cached.cacheTime) > retention) continue;
 
-        // ★ 应用隐藏过滤
         if (enableHideOrigin && cached.origin === stationName) continue;
         if (enableHideDest && cached.destination === stationName) continue;
 
-        // ★ 应用状态转换
         var status = cached.status;
         var statusColor = cached.statusColor;
         if (enableHideOrigin && status === '正在检票') {
@@ -447,10 +441,14 @@ function render(ctx, state, pids) {
         var x = paddingLeft;
         var rowColor = hideRow1 ? CONFIG.primaryTextColor : train.statusColor;
 
+        // ★ 对站名应用截断（基于去掉“站”后的名称）
+        var displayOrigin = truncateName(train.origin, CONFIG.maxStationNameLength);
+        var displayDest   = truncateName(train.destination, CONFIG.maxStationNameLength);
+
         var rowData = [
             (train.routeNumber || '').slice(0, 6),
-            (train.origin || '').slice(0, 10),
-            (train.destination || '').slice(0, 10),
+            displayOrigin,
+            displayDest,
             (function() {
                 if (!train.departureTime) return '';
                 var d = new Date(train.departureTime);
