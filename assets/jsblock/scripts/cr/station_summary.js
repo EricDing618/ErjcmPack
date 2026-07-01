@@ -1,60 +1,34 @@
 // ============================================================
-//  station_summary.js - 国铁车站总览大屏（精简稳定版）
-//  功能：汇总列车信息，固定行数（可动态调整），底部标语+时间
-//  特点：无动态颜色自定义，状态列独立，调试间隔可调
-// ============================================================
-
-// ============================================================
-//  【配置区】
+//  station_summary.js - 国铁车站总览大屏（完整版）
+//  功能：汇总列车信息，动态行数，底部标语+时间
+//  特性：第一行可隐藏始发本站列车，第二行可隐藏终到本站列车
 // ============================================================
 
 var CONFIG = {
-    // ----- 颜色配置 -----
-    backgroundColor: 0x1a1a3e,      // 屏幕背景色（深蓝紫色）
-    primaryTextColor: 0xd0d0d0,     // 表头及普通文字颜色（浅灰色/白色）
-    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）
-    rowEvenColor: 0x1e1e4a,         // 偶数行背景色
-    rowOddColor: 0x2a2a5a,          // 奇数行背景色（略亮，形成斑马纹）
-    bottomLeftColor: 0x00ff66,      // 底部左侧标语颜色（亮绿色）
-    bottomRightColor: 0xff4444,     // 底部右侧时间颜色（红色）
-
-    // ----- 文字处理 -----
-    removeStationSuffix: true,      // true = 站名去掉“站”字
-
-    // ----- 状态保留时间（毫秒）-----
-    departedRetentionMs: 12000,     // 【停止检票】后保留 12000ms = 12秒
-    terminatedRetentionMs: 12000,   // 【到达】后保留 12000ms = 12秒
-
-    // ----- 调试 -----
-    DEBUG: true,                    // true = 启用调试输出
-    debugInterval: 30000,           // 调试输出间隔（毫秒），默认30秒
-
-    // ----- 布局核心参数 -----
-    fixedRows: 5,                   // ★ 固定显示行数（当第三行动态控制无效时使用）
-    showHeader: true,               // 默认显示表头（第一行隐藏控制可覆盖）
-
-    rowHeight: 16,                  // 每行数据的高度（像素）
-    headerHeight: 22,               // 表头高度（像素）
-    paddingLeft: 8,                 // 表格左侧内边距（像素）
-    paddingRight: 12,               // 表格右侧内边距（像素）
-
-    // ★★★ 固定列宽（像素）顺序：车次, 始发站, 终到站, 开点, 站台, 状态
+    backgroundColor: 0x1a1a3e,
+    primaryTextColor: 0xd0d0d0,
+    headerBgColor: 0x0d0d2b,
+    rowEvenColor: 0x1e1e4a,
+    rowOddColor: 0x2a2a5a,
+    bottomLeftColor: 0x00ff66,
+    bottomRightColor: 0xff4444,
+    removeStationSuffix: true,
+    departedRetentionMs: 60000,
+    terminatedRetentionMs: 60000,
+    DEBUG: true,
+    debugInterval: 10000,
+    fixedRows: 5,
+    showHeader: true,
+    rowHeight: 16,
+    headerHeight: 22,
+    paddingLeft: 8,
+    paddingRight: 12,
     colWidths: [50, 110, 110, 45, 35, 55],
-
-    // ★★★ 列间距（像素）顺序：车次-始发, 始发-终到, 终到-开点, 开点-站台, 站台-状态
     colGaps: [25, 25, 20, 20, 20],
-
-    // ★★★ 整行着色开关 ★★★（当第二行未勾选时强制开启）
-    rowColorByStatus: true,         // true = 整行文字跟随状态颜色
-
-    // ----- 底部信息 -----
-    bottomText: '开车前10分钟检票，前3分钟停止检票',  // 默认标语
-    bottomTextScale: 0.55,          // 底部文字缩放
+    rowColorByStatus: true,
+    bottomText: '开车前10分钟检票，前3分钟停止检票',
+    bottomTextScale: 0.55,
 };
-
-// ============================================================
-//  工具函数
-// ============================================================
 
 function parseStationName(name) {
     if (name == null || name === '') return '';
@@ -94,16 +68,11 @@ function getDelayMinutes(deviationMs) {
     return Math.ceil(deviationMs / 60000);
 }
 
-// ============================================================
-//  核心渲染函数
-// ============================================================
-
 function render(ctx, state, pids) {
     var currentTime = Date.now();
     var screenWidth = pids.width;
     var screenHeight = pids.height;
 
-    // 背景
     Text.create('background')
         .text(' ')
         .pos(0, 0)
@@ -112,31 +81,32 @@ function render(ctx, state, pids) {
         .stretchXY()
         .draw(ctx);
 
-    // ===== ★★★ 动态控制参数读取 ★★★ =====
-
-    // 第一行：表头显示控制（勾选=隐藏表头）
+    // ---- 动态控制 ----
     var hideRow0 = pids.isRowHidden(0);
     var showHeader = !hideRow0;
 
-    // 第二行：整行颜色控制
-    // 未勾选 = 整行跟随状态颜色；勾选 = 整行为白色（不再支持自定义颜色）
     var hideRow1 = pids.isRowHidden(1);
 
-    // 第三行：显示行数控制
-    // 未勾选且自订信息为数字 → 显示该数量；否则使用 CONFIG.fixedRows
     var hideRow2 = pids.isRowHidden(2);
     var customMsg2 = pids.getCustomMessage(2) || '';
     var fixedRows = CONFIG.fixedRows;
     if (!hideRow2) {
         var num = parseInt(customMsg2, 10);
-        if (!isNaN(num) && num > 0) {
-            fixedRows = num;
-        }
+        if (!isNaN(num) && num > 0) fixedRows = num;
     }
 
-    // ----- 缓存管理（用于“停止检票/到达”的保留显示）-----
-    if (!state.cache) state.cache = [];
+    // ---- ★ 读取第一、二行自定义消息（功能开关） ----
+    var customMsg0 = (pids.getCustomMessage(0) || '').toLowerCase();
+    var customMsg1 = (pids.getCustomMessage(1) || '').toLowerCase();
+    var enableHideOrigin = (customMsg0.indexOf('true') !== -1);
+    var enableHideDest   = (customMsg1.indexOf('true') !== -1);
 
+    // 本站名称（去掉“站”后缀）
+    var stationObj = pids.station();
+    var stationName = stationObj ? parseStationName(stationObj.getName()) : '';
+
+    // ---- 缓存管理 ----
+    if (!state.cache) state.cache = [];
     state.cache = state.cache.filter(function(item) {
         var retention = (item.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
         return (currentTime - item.cacheTime) <= retention;
@@ -146,22 +116,23 @@ function render(ctx, state, pids) {
     var allTrains = [];
     var processedKeys = {};
 
-    // 调试输出（间隔由 CONFIG.debugInterval 控制）
+    // 调试输出（间隔控制）
     if (CONFIG.DEBUG) {
         var now = Date.now();
         if (!state._lastDebugTime || (now - state._lastDebugTime) >= CONFIG.debugInterval) {
             state._lastDebugTime = now;
+            // 安全获取 arrivals 大小
             var count = 0;
-            if (arrivals && typeof arrivals.size === 'function') {
+            try {
                 count = arrivals.size();
-            } else if (arrivals) {
+            } catch(e) {
                 for (var i = 0; i < 20; i++) {
                     if (arrivals.get(i)) count = i + 1;
                     else break;
                 }
             }
             print('===== 调试 (列车数: ' + count + ') =====');
-            if (arrivals && count > 0) {
+            if (count > 0) {
                 for (var i = 0; i < count; i++) {
                     var entry = arrivals.get(i);
                     if (!entry) continue;
@@ -179,10 +150,11 @@ function render(ctx, state, pids) {
             print('缓存大小: ' + state.cache.length);
             print('表头显示: ' + (showHeader ? '开启' : '关闭'));
             print('显示行数: ' + fixedRows);
+            print('隐藏始发本站: ' + enableHideOrigin);
+            print('隐藏终到本站: ' + enableHideDest);
         }
     }
 
-    // 生成唯一键
     function makeKey(routeNumber, destination, platform, departureTime) {
         var d = new Date(departureTime);
         var timeStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
@@ -192,10 +164,10 @@ function render(ctx, state, pids) {
     // 处理 arrivals
     if (arrivals) {
         var count = 0;
-        if (typeof arrivals.size === 'function') {
+        try {
             count = arrivals.size();
-        } else {
-            for (var i = 0; i < 30; i++) {
+        } catch(e) {
+            for (var i = 0; i < 20; i++) {
                 if (arrivals.get(i)) count = i + 1;
                 else break;
             }
@@ -216,7 +188,7 @@ function render(ctx, state, pids) {
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
 
-            // ---- 终到列车 ----
+            // 终到列车
             if (isTerminating) {
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
@@ -224,36 +196,32 @@ function render(ctx, state, pids) {
                 } else if (isRealtime) {
                     actualTime = departureTime + deviationMs;
                 }
-
                 if (currentTime > actualTime + CONFIG.terminatedRetentionMs) {
                     skip = true;
                 } else {
                     if (currentTime >= actualTime) {
                         status = '到达';
-                        statusColor = 0x00ff44;      // 绿色
+                        statusColor = 0x00ff44;
                     } else {
                         if (isRealtime && deviationMs > 60000) {
                             var delayMin = getDelayMinutes(deviationMs);
                             status = '晚点' + delayMin + '分';
-                            statusColor = 0xFF0000;  // 红色
+                            statusColor = 0xFF0000;
                         } else {
                             status = '正点';
-                            statusColor = 0xFFFF00;  // 黄色
+                            statusColor = 0xFFFF00;
                         }
                     }
                 }
             }
-            // ---- 非终到列车 ----
+            // 非终到列车
             else {
                 var actualDep = departureTime;
-                if (isRealtime) {
-                    actualDep = departureTime + deviationMs;
-                }
-
+                if (isRealtime) actualDep = departureTime + deviationMs;
                 if (currentTime > actualDep) {
                     if (currentTime <= actualDep + CONFIG.departedRetentionMs) {
                         status = '停止检票';
-                        statusColor = 0xFF0000;      // 红色
+                        statusColor = 0xFF0000;
                     } else {
                         skip = true;
                     }
@@ -262,26 +230,47 @@ function render(ctx, state, pids) {
                     if (isRealtime && deviationMs > 60000) {
                         var delayMin = getDelayMinutes(deviationMs);
                         status = '晚点' + delayMin + '分';
-                        statusColor = 0xFF0000;      // 红色
+                        statusColor = 0xFF0000;
                     } else if (remaining <= 60000) {
                         status = '正在检票';
-                        statusColor = 0x00ff44;      // 绿色
+                        statusColor = 0x00ff44;
                     } else {
                         status = '正点';
-                        statusColor = 0xFFFF00;      // 黄色
+                        statusColor = 0xFFFF00;
                     }
                 }
             }
 
             if (skip) continue;
 
-            var key = makeKey(routeNumber, destination, platform, departureTime);
-            if (processedKeys[key]) continue;
-            processedKeys[key] = true;
-
+            // ---- ★ 获取始发站和终到站（去“站”后缀） ----
             var origin = parseStationName(getOriginStation(entry));
             var dest = parseStationName(destination);
             var plat = parseStationName(platform);
+
+            // ---- ★ 第一行开关：隐藏始发本站的列车 ----
+            if (enableHideOrigin && origin === stationName) {
+                continue;
+            }
+
+            // ---- ★ 第二行开关：隐藏终到本站的列车 ----
+            if (enableHideDest && dest === stationName) {
+                continue;
+            }
+
+            // ---- ★ 状态转换（先第一行，后第二行） ----
+            if (enableHideOrigin && status === '正在检票') {
+                status = '到达';
+                statusColor = 0x00ff44;
+            }
+            if (enableHideDest && status === '到达') {
+                status = '正在检票';
+                statusColor = 0x00ff44;
+            }
+
+            var key = makeKey(routeNumber, destination, platform, departureTime);
+            if (processedKeys[key]) continue;
+            processedKeys[key] = true;
 
             // 写入缓存
             if (status === '停止检票' || status === '到达') {
@@ -346,12 +335,11 @@ function render(ctx, state, pids) {
         processedKeys[key] = true;
     }
 
-    // ★ 按计划发车时间升序排列
     allTrains.sort(function(a, b) {
         return a.departureTime - b.departureTime;
     });
 
-    // ----- 固定列宽布局 -----
+    // ---- 布局计算 ----
     var paddingLeft = CONFIG.paddingLeft;
     var paddingRight = CONFIG.paddingRight;
     var headerHeight = CONFIG.headerHeight;
@@ -385,23 +373,20 @@ function render(ctx, state, pids) {
     var displayTrains = allTrains.slice(0, fixedRows);
     while (displayTrains.length < fixedRows) {
         displayTrains.push({
-            routeNumber: '--',
-            origin: '--',
-            destination: '--',
-            departureTime: 9999999999999,
-            platform: '--',
-            status: ' ',
+            isEmpty: true,
+            routeNumber: '',
+            origin: '',
+            destination: '',
+            departureTime: 0,
+            platform: '',
+            status: '',
             statusColor: CONFIG.primaryTextColor,
             isTerminating: false,
             key: null,
         });
     }
 
-    // ============================================================
-    //  绘制
-    // ============================================================
-
-    // 1. 表头
+    // ---- 绘制 ----
     if (showHeader) {
         var headerY = 0;
         Text.create('header_bg')
@@ -418,7 +403,7 @@ function render(ctx, state, pids) {
             Text.create('header_' + colKeys[h])
                 .text(colLabels[h])
                 .pos(xPos, textY)
-                .color(CONFIG.primaryTextColor)   // ★ 固定白色
+                .color(CONFIG.primaryTextColor)
                 .scale(0.8)
                 .draw(ctx);
             xPos += colWidths[h];
@@ -426,7 +411,6 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 2. 数据行
     var dataStartY = showHeader ? headerHeight : 0;
 
     for (var idx = 0; idx < displayTrains.length; idx++) {
@@ -441,31 +425,25 @@ function render(ctx, state, pids) {
             .stretchXY()
             .draw(ctx);
 
-        var x = paddingLeft;
+        if (train.isEmpty) continue;
 
-        // 整行颜色（除状态列外）
-        // 未勾选 → 跟随状态颜色；勾选 → 固定白色
-        var rowColor;
-        if (hideRow1) {
-            rowColor = CONFIG.primaryTextColor;   // 白色
-        } else {
-            rowColor = train.statusColor;
-        }
+        var x = paddingLeft;
+        var rowColor = hideRow1 ? CONFIG.primaryTextColor : train.statusColor;
 
         var rowData = [
-            (train.routeNumber || '--').slice(0, 6),
-            (train.origin || '--').slice(0, 10),
-            (train.destination || '--').slice(0, 10),
+            (train.routeNumber || '').slice(0, 6),
+            (train.origin || '').slice(0, 10),
+            (train.destination || '').slice(0, 10),
             (function() {
+                if (!train.departureTime) return '';
                 var d = new Date(train.departureTime);
                 return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
             })(),
-            (train.platform || '--').slice(0, 4),
+            (train.platform || '').slice(0, 4),
             train.status
         ];
 
         for (var d = 0; d < rowData.length; d++) {
-            // ★★★ 状态列（索引5）始终使用状态颜色，不受整行设置影响 ★★★
             var color = (d === 5) ? train.statusColor : rowColor;
             Text.create('row_' + idx + '_' + colKeys[d])
                 .text(rowData[d])
@@ -478,8 +456,7 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 3. 底部信息
-    // 第四行：勾选隐藏 → 显示默认标语；未勾选 → 若有自定义则显示，否则不显示
+    // 底部信息
     var hideRow3 = pids.isRowHidden(3);
     var customMsg3 = pids.getCustomMessage(3);
 
@@ -501,7 +478,6 @@ function render(ctx, state, pids) {
         var bottomTextY = dividerY + 2 + 3;
         var bottomTextHeight = 14;
 
-        // 防止超出屏幕
         if (bottomTextY + bottomTextHeight > screenHeight) {
             var over = (bottomTextY + bottomTextHeight) - screenHeight;
             bottomTextY -= over;
@@ -522,7 +498,6 @@ function render(ctx, state, pids) {
                 .draw(ctx);
         }
 
-        // 标语（左对齐）
         Text.create('bottom_left')
             .text(bottomDisplayText)
             .pos(tableLeft, bottomTextY)
@@ -531,7 +506,6 @@ function render(ctx, state, pids) {
             .leftAlign()
             .draw(ctx);
 
-        // 时间（右对齐）
         var timeStr = getFormattedTime();
         Text.create('bottom_right')
             .text(timeStr)
@@ -541,20 +515,7 @@ function render(ctx, state, pids) {
             .rightAlign()
             .draw(ctx);
     }
-
-    // 调试输出（补充底部文字信息）
-    if (CONFIG.DEBUG) {
-        var now = Date.now();
-        if (!state._lastDebugTime || (now - state._lastDebugTime) >= CONFIG.debugInterval) {
-            // 已在上面输出完整调试信息，这里不再重复
-            // 但需确保 state._lastDebugTime 已更新（已在上面更新）
-        }
-    }
 }
-
-// ============================================================
-//  生命周期
-// ============================================================
 
 function create(ctx, state, pids) {
     state._lastDebugTime = 0;

@@ -2,12 +2,12 @@
   "pids_images": [
     {
       "id": "cr_platform_pids_1",
-      "name": "国铁站台显示屏1",
+      "name": "中国铁路站台显示屏1",
       "scriptFiles": ["jsblock:scripts/cr/cr_platform_pids_1.js"]
     },
     {
       "id": "station_summary",
-      "name": "国铁车站大屏（投影仪）",
+      "name": "中国铁路车站大屏（投影仪）",
       "scriptFiles": ["jsblock:scripts/cr/station_summary.js"],
       "background": "jsblock:textures/block/pids/transparent.png"
     },

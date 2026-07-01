@@ -149,7 +149,7 @@ function render(ctx, state, pids) {
         }
         var welcomeLines = state.welcomeLines;
         if (welcomeLines && welcomeLines.length > 0) {
-            var lineSpacing = 20;
+            var lineSpacing = 16;
             var totalHeight = welcomeLines.length * lineSpacing;
             var startY = (screenHeight - totalHeight) / 2;
             for (var i = 0; i < welcomeLines.length; i++) {
@@ -159,7 +159,7 @@ function render(ctx, state, pids) {
                     //.bold()
                     .centerAlign()
                     .pos(screenWidth / 2, startY + i * lineSpacing)
-                    .scale(1.5)
+                    .scale(1.3)
                     .draw(ctx);
             }
         } else {

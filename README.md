@@ -21,20 +21,16 @@
 
 ## 核心功能
 > [!NOTE]
-> 1. 列举出的都为仓库中已包含的功能，被勾选的表示可以正常使用，未被勾选的表示正在测试中。  
-> 2. 如有漏洞或建议，欢迎创建issue。请确保之前的issues没有报告过，并给予详细信息。
-> 3. 若有具体的代码实现，欢迎创建PR。
+> 1. 列举出的都为仓库中已包含的功能，被勾选的表示可以正常使用，未被勾选的表示正在测试中。 
+> 2. 请以`assets\jsblock\joban_custom_resources.json`实际注册的内容为准。 
+> 3. 如有漏洞或建议，欢迎创建issue。请确保之前的issues没有报告过，并给予详细信息。
+> 4. 若有具体的代码实现，欢迎创建PR。
 
-- [x] 中国铁路站台显示屏1  
-  路径：`assets\jsblock\scripts\cr\cr_platform_pids_1.js`  
-  自订显示屏格式：`国铁站台显示屏1`
-- [ ] 中国铁路车站大屏（投影仪）  
-  路径：`assets\jsblock\scripts\cr\station_summary_pids.js`
-- [ ] 南京地铁站台显示屏1  
-  路径：`assets\jsblock\scripts\njmetro\njmetro_pids_1.js`  
-  自订显示屏格式：`南京地铁站台显示屏1`  
-> [!NOTE]
-> 请以`assets\jsblock\joban_custom_resources.json`实际注册的内容为准。
+| 可用性 | 名称（自订显示屏格式） | 主要文件路径 |
+| :--- | :--- | :--- |
+| ✅ | 中国铁路站台显示屏1 | `assets\jsblock\scripts\cr\cr_platform_pids_1.js` |
+| ✅ | 中国铁路车站大屏（投影仪） | `assets\jsblock\scripts\cr\station_summary_pids.js`|
+| ❌ | 南京地铁站台显示屏1 | `assets\jsblock\scripts\njmetro\njmetro_pids_1.js` |
 
 ## 已知可用版本：
 > [!NOTE]
