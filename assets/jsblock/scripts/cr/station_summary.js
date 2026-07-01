@@ -1,7 +1,8 @@
 // ============================================================
-//  station_summary.js - 国铁车站总览大屏（完整版）
+//  station_summary.js - 国铁车站总览大屏（缓存过滤修复版）
 //  功能：汇总列车信息，动态行数，底部标语+时间
-//  特性：第一行可隐藏始发本站列车，第二行可隐藏终到本站列车
+//  特性：第一行可隐藏始发本站列车并转换状态，第二行可隐藏终到本站列车并转换状态
+//  修复：缓存中的列车也应用过滤和状态转换
 // ============================================================
 
 var CONFIG = {
@@ -121,7 +122,6 @@ function render(ctx, state, pids) {
         var now = Date.now();
         if (!state._lastDebugTime || (now - state._lastDebugTime) >= CONFIG.debugInterval) {
             state._lastDebugTime = now;
-            // 安全获取 arrivals 大小
             var count = 0;
             try {
                 count = arrivals.size();
@@ -161,7 +161,7 @@ function render(ctx, state, pids) {
         return routeNumber + '|' + destination + '|' + platform + '|' + timeStr;
     }
 
-    // 处理 arrivals
+    // ---- 处理 arrivals ----
     if (arrivals) {
         var count = 0;
         try {
@@ -188,7 +188,7 @@ function render(ctx, state, pids) {
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
 
-            // 终到列车
+            // ---- 状态判定 ----
             if (isTerminating) {
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
@@ -213,9 +213,7 @@ function render(ctx, state, pids) {
                         }
                     }
                 }
-            }
-            // 非终到列车
-            else {
+            } else {
                 var actualDep = departureTime;
                 if (isRealtime) actualDep = departureTime + deviationMs;
                 if (currentTime > actualDep) {
@@ -243,22 +241,22 @@ function render(ctx, state, pids) {
 
             if (skip) continue;
 
-            // ---- ★ 获取始发站和终到站（去“站”后缀） ----
+            // ---- 解析站名 ----
             var origin = parseStationName(getOriginStation(entry));
             var dest = parseStationName(destination);
             var plat = parseStationName(platform);
 
-            // ---- ★ 第一行开关：隐藏始发本站的列车 ----
+            // ---- ★ 第一行：隐藏始发本站 ----
             if (enableHideOrigin && origin === stationName) {
                 continue;
             }
 
-            // ---- ★ 第二行开关：隐藏终到本站的列车 ----
+            // ---- ★ 第二行：隐藏终到本站 ----
             if (enableHideDest && dest === stationName) {
                 continue;
             }
 
-            // ---- ★ 状态转换（先第一行，后第二行） ----
+            // ---- ★ 状态转换 ----
             if (enableHideOrigin && status === '正在检票') {
                 status = '到达';
                 statusColor = 0x00ff44;
@@ -272,7 +270,7 @@ function render(ctx, state, pids) {
             if (processedKeys[key]) continue;
             processedKeys[key] = true;
 
-            // 写入缓存
+            // ---- 写入缓存 ----
             if (status === '停止检票' || status === '到达') {
                 var cachedItem = null;
                 for (var c = 0; c < state.cache.length; c++) {
@@ -314,21 +312,40 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 从缓存添加
+    // ---- ★ 从缓存添加（应用过滤和状态转换） ----
     for (var cIdx = 0; cIdx < state.cache.length; cIdx++) {
         var cached = state.cache[cIdx];
         var key = cached.key;
         if (processedKeys[key]) continue;
+
+        // 检查是否超时
         var retention = (cached.status === '停止检票') ? CONFIG.departedRetentionMs : CONFIG.terminatedRetentionMs;
         if ((currentTime - cached.cacheTime) > retention) continue;
+
+        // ★ 应用隐藏过滤
+        if (enableHideOrigin && cached.origin === stationName) continue;
+        if (enableHideDest && cached.destination === stationName) continue;
+
+        // ★ 应用状态转换
+        var status = cached.status;
+        var statusColor = cached.statusColor;
+        if (enableHideOrigin && status === '正在检票') {
+            status = '到达';
+            statusColor = 0x00ff44;
+        }
+        if (enableHideDest && status === '到达') {
+            status = '正在检票';
+            statusColor = 0x00ff44;
+        }
+
         allTrains.push({
             routeNumber: cached.routeNumber,
             origin: cached.origin,
             destination: cached.destination,
             departureTime: cached.departureTime,
             platform: cached.platform,
-            status: cached.status,
-            statusColor: cached.statusColor,
+            status: status,
+            statusColor: statusColor,
             isTerminating: false,
             key: key,
         });
@@ -456,7 +473,7 @@ function render(ctx, state, pids) {
         }
     }
 
-    // 底部信息
+    // ---- 底部信息 ----
     var hideRow3 = pids.isRowHidden(3);
     var customMsg3 = pids.getCustomMessage(3);
 
