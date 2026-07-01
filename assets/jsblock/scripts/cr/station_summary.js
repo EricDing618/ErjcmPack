@@ -27,7 +27,7 @@ var CONFIG = {
     colWidths: [50, 110, 110, 45, 35, 55],
     colGaps: [25, 25, 20, 20, 20],
     rowColorByStatus: true,
-    bottomText: '开车前10分钟检票，前3分钟停止检票',
+    bottomText: '开车前3分钟检票，前1分钟停止检票',
     bottomTextScale: 0.55,
     // ★ 站名截断阈值：超过此长度则显示“...”
     maxStationNameLength: 6,
