@@ -1,36 +1,50 @@
-// ============================================================
-//  station_summary.js - 国铁车站总览大屏（站名截断版）
-//  功能：汇总列车信息，动态行数，底部标语+时间
-//  特性：第一行可隐藏始发本站列车，第二行可隐藏终到本站列车
-//  新增：站名长度超过阈值时自动截断并显示“...”
-// ============================================================
+// Made by EricDing618 & DeepSeek
 
 var CONFIG = {
-    backgroundColor: 0x1a1a3e,
-    primaryTextColor: 0xd0d0d0,
-    headerBgColor: 0x0d0d2b,
-    rowEvenColor: 0x1e1e4a,
-    rowOddColor: 0x2a2a5a,
-    bottomLeftColor: 0x00ff66,
-    bottomRightColor: 0xff4444,
-    removeStationSuffix: true,
-    departedRetentionMs: 60000,
-    terminatedRetentionMs: 60000,
-    DEBUG: true,
-    debugInterval: 10000,
-    fixedRows: 5,
-    showHeader: true,
-    rowHeight: 16,
-    headerHeight: 22,
-    paddingLeft: 8,
-    paddingRight: 12,
+    // ----- 颜色配置 -----
+    backgroundColor: 0x1a1a3e,      // 屏幕背景色（深蓝紫色，十六进制颜色值）
+    primaryTextColor: 0xd0d0d0,     // 表头及普通文字颜色（浅灰色/白色）
+    headerBgColor: 0x0d0d2b,        // 表头背景色（深色）
+    rowEvenColor: 0x1e1e4a,         // 偶数行背景色（深蓝紫色）
+    rowOddColor: 0x2a2a5a,          // 奇数行背景色（略亮，形成斑马纹）
+    bottomLeftColor: 0x00ff66,      // 底部左侧标语颜色（亮绿色）
+    bottomRightColor: 0xff4444,     // 底部右侧时间颜色（红色）
+
+    // ----- 文字处理 -----
+    removeStationSuffix: true,      // true = 站名去掉“站”字（如“东昌北站”→“东昌北”）
+
+    // ----- 状态保留时间（毫秒）-----
+    departedRetentionMs: 6000,      // 【停止检票】后保留时间（毫秒），6000ms = 6秒
+    terminatedRetentionMs: 10000,   // 【到达】后保留时间（毫秒），10000ms = 10秒
+
+    // ----- 调试 -----
+    DEBUG: false,                    // true = 启用调试输出（在游戏日志中打印列车信息）
+    debugInterval: 10000,           // 调试输出间隔（毫秒），10000ms = 10秒
+
+    // ----- 布局核心参数 -----
+    fixedRows: 5,                   // 默认显示行数（当第三行动态控制无效时使用）
+    showHeader: true,               // 默认是否显示表头（第一行隐藏控制可覆盖）
+
+    rowHeight: 16,                  // 每行数据的高度（像素）
+    headerHeight: 22,               // 表头高度（像素）
+    paddingLeft: 8,                 // 表格左侧内边距（像素）
+    paddingRight: 12,               // 表格右侧内边距（像素）
+
+    // 固定列宽（像素）顺序：车次, 始发站, 终到站, 开点, 站台, 状态
     colWidths: [50, 110, 110, 45, 35, 55],
+
+    // 列间距（像素）顺序：车次-始发, 始发-终到, 终到-开点, 开点-站台, 站台-状态
     colGaps: [25, 25, 20, 20, 20],
-    rowColorByStatus: true,
-    bottomText: '开车前3分钟检票，前1分钟停止检票',
-    bottomTextScale: 0.55,
-    // ★ 站名截断阈值：超过此长度则显示“...”
-    maxStationNameLength: 6,
+
+    // 整行着色开关（当第二行未勾选时强制开启）
+    rowColorByStatus: true,         // true = 整行文字跟随状态颜色（正点黄、晚点红等）
+
+    // ----- 底部信息 -----
+    bottomText: '开车前3分钟检票，前1分钟停止检票',  // 默认底部标语（当第四行隐藏时显示）
+    bottomTextScale: 0.55,          // 底部文字缩放比例（0.55 = 55% 大小）
+
+    // ----- 站名截断 -----
+    maxStationNameLength: 6,        // ★ 站名（去掉“站”后）超过此长度时显示“...”，例如“乌鲁木齐”长度4不截断，若超过6则截断
 };
 
 // ---- 截断函数 ----
