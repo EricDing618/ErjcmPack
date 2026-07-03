@@ -4,7 +4,8 @@
 
 <h1>ErjcmPack</h1>
 
-一个Joban Client Mod资源包
+EricDing618's resourcepack for   
+Joban Client Mod
 
 </div>
 
@@ -25,14 +26,14 @@
 > 2. 请以`assets\jsblock\joban_custom_resources.json`实际注册的内容为准。 
 > 3. 如有漏洞或建议，欢迎创建issue。请确保之前的issues没有报告过，并给予详细信息。
 > 4. 若有具体的代码实现，欢迎创建PR。
+> 5. 详细使用指南请参考 [res/guide.md](res/guide.md) 。
 
 | 可用性 | 名称（自订显示屏格式） | 主要文件路径 |
 | :--- | :--- | :--- |
 | ✅ | 中国铁路站台显示屏1 | `assets\jsblock\scripts\cr\cr_platform_pids_1.js` |
-| ✅ | 中国铁路车站大屏（投影仪） | `assets\jsblock\scripts\cr\station_summary_pids.js`|
+| ✅ | 中国铁路车站大屏（投影仪） | `assets\jsblock\scripts\cr\station_summary.js`|
 | ❌ | 南京地铁站台显示屏1 | `assets\jsblock\scripts\njmetro\njmetro_pids_1.js` |
 
-**
 ## 已知可用版本：
 > [!NOTE]
 > 1. 已知的可用版本并不意味着其他版本不可用。  
