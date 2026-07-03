@@ -32,10 +32,11 @@
 | ✅ | 中国铁路车站大屏（投影仪） | `assets\jsblock\scripts\cr\station_summary_pids.js`|
 | ❌ | 南京地铁站台显示屏1 | `assets\jsblock\scripts\njmetro\njmetro_pids_1.js` |
 
+**
 ## 已知可用版本：
 > [!NOTE]
 > 1. 已知的可用版本并不意味着其他版本不可用。  
-> 2. 您可以在`Issues`中提供更多的有用信息，并等待修改 [已知可用版本](#已知可用版本) 。 ~~作者懒，不想自己去找~~
+> 2. 您可以在`Issues`中提供更多的有用信息，并等待修改 [已知可用版本](#已知可用版本) 。 ~~作者懒，不想自己试~~
 - - Minecraft 1.20.4
   - Fabric 0.16.14
   - Optifine_I7
