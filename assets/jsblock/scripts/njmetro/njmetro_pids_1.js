@@ -1,7 +1,4 @@
-// ============================================================
-// 南京地铁二号线 PIDS（英文站名大写且去空格）
-// 第一二行布局保持不变，第三行所有X坐标集中管理
-// ============================================================
+// Made by EricDing618 & DeepSeek
 
 const LANG_SWITCH_INTERVAL = 15000;
 const COLOR_YELLOW = 0xFFD700;
@@ -13,6 +10,10 @@ const SIDE_PADDING = 3;
 const ROW_HEIGHT = 23;
 const LARGE_SCALE = 1.725;
 const SMALL_SCALE = 1.0;
+
+// ===== 英文站名格式控制开关 =====
+const ENABLE_UPPERCASE = true;      // 是否将英文站名转为大写
+const ENABLE_REMOVE_SPACES = true;  // 是否移除英文站名中的空格
 
 // 左标签右对齐锚点（第一二行标签的右端对齐位置）
 const LEFT_LABEL_ANCHOR = 70;   // 调整此值可整体左右移动第一二行标签
@@ -27,10 +28,10 @@ const THIRD_COL1_X = SIDE_PADDING;    // 默认3
 const THIRD_COL2_X = 45;              // 调整此值移动时间文本
 
 // 元素3：“开往/Dest.”（黄色）
-const THIRD_COL3_X = 100;              // 调整此值移动“开往”
+const THIRD_COL3_X = 105;              // 调整此值移动“开往”
 
 // 元素4：终点站名（红色，自动拉伸压缩）
-const THIRD_COL4_X = 130;              // 调整此值移动终点站起始位置
+const THIRD_COL4_X = 135;              // 调整此值移动终点站起始位置
 
 // ===== 辅助函数（不变）=====
 function getLocalizedName(stationName, isEnglish) {
@@ -58,7 +59,7 @@ function getArrivalStatusText(arrivalTime, isEnglish) {
         return { text: isEnglish ? "Arrive" : "列车进站", isArriving: true };
     }
     if (diffSec < 60) {
-        return { text: isEnglish ? "1 min" : "1分钟内到", isArriving: false };
+        return { text: isEnglish ? "Coming Soon" : "即将进站", isArriving: false };
     }
     var minutes = Math.floor(diffSec / 60);
     return { text: isEnglish ? minutes + " min" : minutes + " 分钟到达", isArriving: false };
@@ -127,8 +128,11 @@ function render(ctx, state, pids) {
         var dest = firstArrival.destination();
         if (dest != null) {
             var destName = getLocalizedName(dest, isEnglish);
-            // 英文站名转大写并移除空格
-            if (isEnglish) destName = destName.toUpperCase().replace(/ /g, '');
+            // 根据开关处理英文站名
+            if (isEnglish) {
+                if (ENABLE_UPPERCASE) destName = destName.toUpperCase();
+                if (ENABLE_REMOVE_SPACES) destName = destName.replace(/ /g, '');
+            }
 
             var rightInfoStartX = LEFT_LABEL_ANCHOR + 10;
             var availableWidth = screenWidth - SIDE_PADDING - rightInfoStartX;
@@ -186,8 +190,11 @@ function render(ctx, state, pids) {
         var secondDest = secondArrival.destination();
         if (secondDest != null) {
             var destName2 = getLocalizedName(secondDest, isEnglish);
-            // 英文站名转大写并移除空格
-            if (isEnglish) destName2 = destName2.toUpperCase().replace(/ /g, '');
+            // 根据开关处理英文站名
+            if (isEnglish) {
+                if (ENABLE_UPPERCASE) destName2 = destName2.toUpperCase();
+                if (ENABLE_REMOVE_SPACES) destName2 = destName2.replace(/ /g, '');
+            }
 
             var areaWidth2 = screenWidth - THIRD_COL4_X - SIDE_PADDING;
             Text.create("第三行终点站")
