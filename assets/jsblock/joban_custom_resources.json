@@ -15,6 +15,11 @@
       "id": "njmetro_pids_1",
       "name": "南京地铁站台显示屏1",
       "scriptFiles": ["jsblock:scripts/njmetro/njmetro_pids_1.js"]
+    },
+    {
+      "id": "njmetro_pids_2",
+      "name": "南京地铁站台显示屏2",
+      "scriptFiles": ["jsblock:scripts/njmetro/njmetro_pids_2.js"]
     }
   ]
 }

@@ -547,6 +547,7 @@ function render(ctx, state, pids) {
 }
 
 function create(ctx, state, pids) {
+    print("国铁车站大屏已加载，GitHub: pyric-studio/ErjcmPack");
     state._lastDebugTime = 0;
     state.cache = [];
 }

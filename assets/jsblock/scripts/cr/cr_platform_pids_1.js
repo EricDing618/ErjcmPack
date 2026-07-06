@@ -348,7 +348,7 @@ function render(ctx, state, pids) {
 
 // ===== 生命周期函数（不变）=====
 function create(ctx, state, pids) {
-    print("国铁站台PIDS已创建");
+    print("国铁站台PIDS已创建，GitHub: pyric-studio/ErjcmPack");
     var station = pids.station();
     var stationName = station ? station.getName() : "本站";
     state.lastWelcomeChange = Date.now();
