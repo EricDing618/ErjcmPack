@@ -28,11 +28,11 @@ Joban Client Mod
 > 4. 若有具体的代码实现，欢迎创建PR。
 > 5. 详细使用指南请参考 [res/guide.md](res/guide.md) 。
 
-| 可用性 | 名称（自订显示屏格式） | 主要文件路径 |
-| :--- | :--- | :--- |
-| ✅ | 中国铁路站台显示屏1 | `assets\jsblock\scripts\cr\cr_platform_pids_1.js` |
-| ✅ | 中国铁路车站大屏（投影仪） | `assets\jsblock\scripts\cr\station_summary.js`|
-| ❌ | 南京地铁站台显示屏1 | `assets\jsblock\scripts\njmetro\njmetro_pids_1.js` |
+| 可用性 | 名称（自订显示屏格式） | 建议使用的命名空间ID | 主要文件路径 |
+| :--- | :--- | :--- | :--- |
+| ✅ | 中国铁路站台显示屏1 | `jsblock:pids_1a` | `assets\jsblock\scripts\cr\cr_platform_pids_1.js` |
+| ✅ | 中国铁路车站大屏（投影仪） | `jsblock:pids_projector` | `assets\jsblock\scripts\cr\station_summary.js`|
+| ❌ | 南京地铁站台显示屏1 | `jsblock:pids_1a` | `assets\jsblock\scripts\njmetro\njmetro_pids_1.js` |
 
 ## 已知可用版本：
 > [!NOTE]

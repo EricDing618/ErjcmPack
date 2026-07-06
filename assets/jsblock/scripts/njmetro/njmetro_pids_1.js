@@ -1,179 +1,215 @@
-// ---------- 全局配置 ----------
-var LANG_SWITCH_INTERVAL = 15000;   // 15秒切换
-var lastSwitchTime = Date.now();
-var globalLang = 0;                 // 0: 中文, 1: 英文
+// ============================================================
+// 南京地铁二号线 PIDS（修正对齐 - 标签左置但右对齐）
+// 本次列车/Arrival 和 开往/Dest. 左对齐放置，但文本右对齐，使得“车”与“往”对齐
+// ============================================================
 
-// 配色常量 (南京地铁二号线风格)
-var COLORS = {
-    yellow: 0xFFD700,
-    red: 0xFF0000,
-    green: 0x32CD32
-};
+// ==================== 全局配置 ====================
+const LANG_SWITCH_INTERVAL = 15000;
 
-// 布局常量 (基于Minecraft世界坐标，可根据实际效果微调)
-var ROW1_Y = 0.15;          // 第一行Y坐标
-var ROW2_Y = 0.35;          // 第二行Y坐标
-var ROW3_Y = 0.55;          // 第三行Y坐标
-var LEFT_MARGIN = 0.08;     // 左侧起始X
-var FONT_LARGE = 0.12;      // 前两行字体大小
-var FONT_SMALL = 0.09;      // 第三行字体大小
-var SPACING_WIDE = 0.25;    // "本次列车" 与 时间 之间的间距
-var SPACING_NARROW = 0.05;  // 第三行各元素间距
+const COLOR_YELLOW = 0xFFD700;
+const COLOR_RED    = 0xFF0000;
+const COLOR_GREEN  = 0x32CD32;
 
-// ---------- 安全的站名拆分函数 (支持 | 和 ｜) ----------
-function splitStationName(fullName, lang) {
-    if (!fullName || fullName === "") return "未知";
-    var idx = fullName.indexOf('|');
-    if (idx === -1) idx = fullName.indexOf('｜');
+const TOP_PADDING = 5;
+const SIDE_PADDING = 3;
+const ROW_HEIGHT = 23;
+const LARGE_SCALE = 1.725;
+const SMALL_SCALE = 1.0;
+
+// 第二行标签宽度估算（仅用于计算终点站的可用区域，但不再需要因为终点站靠右）
+// 但为了限制终点站宽度，我们保留区域计算
+const LABEL_WIDTH_EST = 30;   // 可不使用
+
+// ==================== 辅助函数 ====================
+
+function getLocalizedName(stationName, isEnglish) {
+    if (!stationName) return "未知";
+    stationName = String(stationName);
+    var idx = stationName.indexOf('|');
+    if (idx === -1) idx = stationName.indexOf('｜');
     if (idx !== -1) {
-        // 前半部分为中文，后半部分为英文
-        var parts = fullName.split(idx === -1 ? '｜' : '|');
-        if (lang === 0) {
-            return parts[0] !== "" ? parts[0] : "未知";
+        var before = stationName.substring(0, idx).trim();
+        var after  = stationName.substring(idx + 1).trim();
+        if (isEnglish) {
+            return after !== "" ? after : before;
         } else {
-            return parts.length > 1 ? parts[1] : parts[0]; // 无英文时回退中文
+            return before !== "" ? before : stationName;
         }
     }
-    return fullName; // 无竖线则原样返回
+    return stationName;
 }
 
-// ---------- 获取终到站名 (自动拆分) ----------
-function getDestinationName(arrival, lang) {
-    if (!arrival) return "";
-    var destRaw = arrival.destination();
-    return splitStationName(destRaw, lang);
-}
-
-// ---------- 获取始发站名 (用于下次列车信息，可选) ----------
-function getOriginStationName(arrival, lang) {
-    if (!arrival) return "";
-    try {
-        var route = arrival.route();
-        if (route == null) return "";
-        var platforms = route.getPlatforms();
-        if (platforms == null || platforms.size() == 0) return "";
-        var firstPlatform = platforms.get(0);
-        var rawName = firstPlatform.getStationName() || "";
-        return splitStationName(rawName, lang);
-    } catch (e) {
-        return "";
-    }
-}
-
-// ---------- 格式化到达时间文本 ----------
-function formatArrivalText(arrival, lang) {
-    if (!arrival) return "--";
-    var arrivalTime = arrival.arrivalTime();
-    if (!arrivalTime) return "--";
-
-    var diffMs = arrivalTime - Date.now();
-
-    // 进站中 (10秒内)
-    if (diffMs <= 10000) {
-        return lang === 0 ? "列车进站" : "Arrive";
-    }
-
-    var minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) {
-        return lang === 0 ? "1分钟内到" : "1 min";
-    }
-
-    if (lang === 0) {
-        return minutes + "分钟到达";
-    } else {
-        return minutes + " min";
-    }
-}
-
-// ---------- JCM核心函数: create ----------
-function create(ctx, state, pids) {
-    state.lang = 0; // 独立语言状态，与全局同步
-    state.lastSwitch = Date.now();
-}
-
-// ---------- JCM核心函数: render ----------
-function render(ctx, state, pids) {
+function getArrivalStatusText(arrivalTime, isEnglish) {
     var now = Date.now();
+    var diffMs = arrivalTime - now;
+    var diffSec = Math.floor(diffMs / 1000);
 
-    // 1. 全局语言切换 (15秒周期)
-    if (now - lastSwitchTime > LANG_SWITCH_INTERVAL) {
-        globalLang = 1 - globalLang;
-        lastSwitchTime = now;
+    if (diffSec <= 10) {
+        return { text: isEnglish ? "Arrive" : "列车进站", isArriving: true };
     }
-    var lang = globalLang;
-    state.lang = lang;
+    if (diffSec < 60) {
+        return { text: isEnglish ? "1 min" : "1分钟内到", isArriving: false };
+    }
+    var minutes = Math.floor(diffSec / 60);
+    return { text: isEnglish ? minutes + " min" : minutes + "分钟到达", isArriving: false };
+}
 
-    // 2. 获取列车到达数据
-    var arrivals = pids.arrivals();
-    var firstTrain = arrivals.size() > 0 ? arrivals.get(0) : null;
-    var secondTrain = arrivals.size() > 1 ? arrivals.get(1) : null;
+// ==================== 生命周期 ====================
 
+function create(ctx, state, pids) {
+    state.lang = "zh";
+    state.lastSwitch = Date.now();
+    print("南京地铁二号线 PIDS 已加载");
+}
+
+function render(ctx, state, pids) {
     var screenWidth = pids.width;
     var screenHeight = pids.height;
 
-    // 3. 第一行："本次列车" + 到达状态
-    var firstLineLeft = lang === 0 ? "本次列车" : "Arrival";
-    var firstLineRight = formatArrivalText(firstTrain, lang);
-    drawText(ctx, firstLineLeft, LEFT_MARGIN, ROW1_Y, FONT_LARGE, COLORS.yellow, 'left');
-    drawText(ctx, firstLineRight, LEFT_MARGIN + SPACING_WIDE, ROW1_Y, FONT_LARGE, COLORS.red, 'left');
+    var now = Date.now();
+    if (now - state.lastSwitch >= LANG_SWITCH_INTERVAL) {
+        state.lang = (state.lang === "zh") ? "en" : "zh";
+        state.lastSwitch = now;
+    }
+    var isEnglish = (state.lang === "en");
 
-    // 4. 第二行："开往" + 终到站 (注意对齐："往" 与第一行 "车" 对齐)
-    if (firstTrain) {
-        var destPrefix = lang === 0 ? "开往" : "Dest.";
-        var destName = getDestinationName(firstTrain, lang);
-        // 对齐：第一行中 "车" 位于 "本次列车" 的第三个字符（索引2），
-        // 这里通过调整 "开往" 的绘制位置来模拟对齐。简单做法是让 "开往" 与 "本次列车" 左对齐，
-        // 然后通过空格微调。更精确的方式是计算字符宽度，此处采用偏移量近似。
-        var prefixX = LEFT_MARGIN;  // 与第一行左对齐
-        var destX = LEFT_MARGIN + SPACING_WIDE;
-        drawText(ctx, destPrefix, prefixX, ROW2_Y, FONT_LARGE, COLORS.yellow, 'left');
-        drawText(ctx, destName, destX, ROW2_Y, FONT_LARGE, COLORS.red, 'left');
+    var arrivals = pids.arrivals();
+    var firstArrival = arrivals.get(0);
+    var secondArrival = arrivals.get(1);
+
+    // ---- 第一行 ----
+    var label1 = isEnglish ? "Arrival" : "本次列车";
+    var labelColor = COLOR_YELLOW;  // 统一黄色
+
+    // 标签：左对齐放置，但文本右对齐，使得文字右端对齐
+    Text.create("第一行标签")
+        .text(label1)
+        .color(labelColor)
+        .fontMC()
+        .rightAlign()               // 文本右对齐
+        .pos(SIDE_PADDING, TOP_PADDING)   // 位置靠左
+        .scale(LARGE_SCALE)
+        .draw(ctx);
+
+    // 右侧状态：右对齐，靠右放置
+    if (firstArrival != null) {
+        var arrivalTime = firstArrival.arrivalTime();
+        if (arrivalTime != null) {
+            var status = getArrivalStatusText(arrivalTime, isEnglish);
+            var statusColor = status.isArriving ? COLOR_RED : COLOR_YELLOW;
+            Text.create("第一行状态")
+                .text(status.text)
+                .color(statusColor)
+                .fontMC()
+                .rightAlign()               // 右对齐
+                .pos(screenWidth - SIDE_PADDING, TOP_PADDING) // 靠右
+                .scale(LARGE_SCALE)
+                .draw(ctx);
+        }
     }
 
-    // 5. 第三行："下次列车" + 到达时间 + "开往" + 终到站
-    if (secondTrain) {
-        var nextPrefix = lang === 0 ? "下次列车" : "Next";
-        var nextTime = formatArrivalText(secondTrain, lang);
-        var nextDestPrefix = lang === 0 ? "开往" : "Dest.";
-        var nextDestName = getDestinationName(secondTrain, lang);
+    // ---- 第二行 ----
+    var label2 = isEnglish ? "Dest." : "开往";
+    // 标签：同样左置右对齐
+    Text.create("第二行标签")
+        .text(label2)
+        .color(labelColor)          // 黄色
+        .fontMC()
+        .rightAlign()
+        .pos(SIDE_PADDING, TOP_PADDING + ROW_HEIGHT)
+        .scale(LARGE_SCALE)
+        .draw(ctx);
 
-        // 计算第三行各段的位置
-        var col1X = LEFT_MARGIN;
-        var col2X = col1X + 0.25;
-        var col3X = col2X + 0.20;
-        var col4X = col3X + 0.12;
+    // 终点站：右对齐靠右放置，并使用 stretchXY 防止过长
+    if (firstArrival != null) {
+        var dest = firstArrival.destination();
+        if (dest != null) {
+            var destName = getLocalizedName(dest, isEnglish);
+            // 终点站显示在右侧，右对齐，但为了限制宽度，使用 size + stretchXY
+            var areaWidth = screenWidth - SIDE_PADDING - SIDE_PADDING; // 预留左右边距，但实际可更宽
+            // 为了不与左侧标签重叠，我们可以让终点站占满右侧区域，但为了安全，限制起始X为屏幕一半或更右
+            // 因为标签是左置右对齐，终点站右置右对齐，它们之间可能有重叠，所以需要估算标签长度并错开。
+            // 简单起见，我们让终点站从屏幕中间偏左开始，但右对齐，这样它的左边界会动态变化。
+            // 更可靠的方式：使用左对齐并指定区域，确保不与标签重叠。
+            // 但用户要求“本次列车、开往都在显示屏最左侧”，所以终点站应该在右侧。
+            // 我们采用右对齐，并让位置在屏幕右侧，这样如果文本短则贴右，长则向左延伸，可能会覆盖标签。
+            // 为避免覆盖，我们限制宽度并拉伸。
+            // 我们使用 leftAlign 并指定起始X为标签右侧预估位置。
+            // 但简单起见，我们使用右对齐并设置pos为屏幕宽度-SIDE_PADDING，同时使用size限制宽度。
+            // 这样文本会从右向左延伸，但size会限制其最大宽度，超过则拉伸。
+            var labelWidthGuess = 30; // 估算标签宽度
+            var startX = SIDE_PADDING + labelWidthGuess; // 从标签右侧开始
+            var availWidth = screenWidth - startX - SIDE_PADDING;
+            if (availWidth < 20) availWidth = 20;
+            Text.create("第二行终点站")
+                .text(destName)
+                .color(COLOR_RED)
+                .fontMC()
+                .leftAlign()               // 左对齐，从startX开始
+                .pos(startX, TOP_PADDING + ROW_HEIGHT)
+                .size(availWidth, ROW_HEIGHT)
+                .stretchXY()               // 拉伸压缩
+                .scale(LARGE_SCALE)
+                .draw(ctx);
+        }
+    }
 
-        drawText(ctx, nextPrefix, col1X, ROW3_Y, FONT_SMALL, COLORS.green, 'left');
-        drawText(ctx, nextTime, col2X, ROW3_Y, FONT_SMALL, COLORS.red, 'left');
-        drawText(ctx, nextDestPrefix, col3X, ROW3_Y, FONT_SMALL, COLORS.yellow, 'left');
-        drawText(ctx, nextDestName, col4X, ROW3_Y, FONT_SMALL, COLORS.red, 'left');
-    } else {
-        // 无下次列车时可显示占位符或留空
+    // ---- 第三行 ----
+    if (secondArrival != null) {
+        var label3 = isEnglish ? "Next" : "下次列车";
+        Text.create("第三行标签")
+            .text(label3)
+            .color(COLOR_GREEN)
+            .fontMC()
+            .leftAlign()
+            .pos(SIDE_PADDING, TOP_PADDING + ROW_HEIGHT * 2)
+            .scale(SMALL_SCALE)
+            .draw(ctx);
+
+        var secondTime = secondArrival.arrivalTime();
+        if (secondTime != null) {
+            var status2 = getArrivalStatusText(secondTime, isEnglish);
+            var col2X = 24;
+            Text.create("第三行时间")
+                .text(status2.text)
+                .color(COLOR_RED)
+                .fontMC()
+                .leftAlign()
+                .pos(col2X, TOP_PADDING + ROW_HEIGHT * 2)
+                .scale(SMALL_SCALE)
+                .draw(ctx);
+        }
+
+        var label4 = isEnglish ? "Dest." : "开往";
+        var col3X = 46;
+        Text.create("第三行开往标签")
+            .text(label4)
+            .color(COLOR_YELLOW)
+            .fontMC()
+            .leftAlign()
+            .pos(col3X, TOP_PADDING + ROW_HEIGHT * 2)
+            .scale(SMALL_SCALE)
+            .draw(ctx);
+
+        var secondDest = secondArrival.destination();
+        if (secondDest != null) {
+            var destName2 = getLocalizedName(secondDest, isEnglish);
+            var col4X = 64;
+            var areaWidth2 = screenWidth - col4X - SIDE_PADDING;
+            Text.create("第三行终点站")
+                .text(destName2)
+                .color(COLOR_RED)
+                .fontMC()
+                .leftAlign()
+                .pos(col4X, TOP_PADDING + ROW_HEIGHT * 2)
+                .size(areaWidth2, ROW_HEIGHT)
+                .stretchXY()
+                .scale(SMALL_SCALE)
+                .draw(ctx);
+        }
     }
 }
 
-// ---------- 辅助函数：绘制文本 (封装JCM Text API) ----------
-function drawText(ctx, text, x, y, size, color, align) {
-    var textObj = Text.create()
-        .text(text)
-        .pos(x, y)
-        .size(size, size)
-        .color(color)
-        .font("mtr:mtr")
-        .shadowed();
-
-    if (align === 'center') {
-        textObj.centerAlign();
-    } else if (align === 'right') {
-        textObj.rightAlign();
-    } else {
-        textObj.leftAlign();
-    }
-
-    textObj.draw(ctx);
-}
-
-// ---------- JCM核心函数: dispose ----------
 function dispose(ctx, state, pids) {
-    // 无需清理资源
+    print("南京地铁二号线 PIDS 已卸载");
 }
