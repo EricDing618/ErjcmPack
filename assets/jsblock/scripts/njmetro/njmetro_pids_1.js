@@ -1,4 +1,7 @@
-// Made by EricDing618 & DeepSeek
+// ============================================================
+// 南京地铁二号线 PIDS（英文站名大写且去空格）
+// 第一二行布局保持不变，第三行所有X坐标集中管理
+// ============================================================
 
 const LANG_SWITCH_INTERVAL = 15000;
 const COLOR_YELLOW = 0xFFD700;
@@ -124,12 +127,11 @@ function render(ctx, state, pids) {
         var dest = firstArrival.destination();
         if (dest != null) {
             var destName = getLocalizedName(dest, isEnglish);
-            // 英文站名转大写
-            if (isEnglish) destName = destName.toUpperCase();
+            // 英文站名转大写并移除空格
+            if (isEnglish) destName = destName.toUpperCase().replace(/ /g, '');
 
             var rightInfoStartX = LEFT_LABEL_ANCHOR + 10;
             var availableWidth = screenWidth - SIDE_PADDING - rightInfoStartX;
-            // 强制压缩：最大宽度 60 像素
             var MAX_DEST_WIDTH = 60;
             availableWidth = Math.min(availableWidth, MAX_DEST_WIDTH);
             if (availableWidth < 20) availableWidth = 20;
@@ -184,8 +186,8 @@ function render(ctx, state, pids) {
         var secondDest = secondArrival.destination();
         if (secondDest != null) {
             var destName2 = getLocalizedName(secondDest, isEnglish);
-            // 英文站名转大写
-            if (isEnglish) destName2 = destName2.toUpperCase();
+            // 英文站名转大写并移除空格
+            if (isEnglish) destName2 = destName2.toUpperCase().replace(/ /g, '');
 
             var areaWidth2 = screenWidth - THIRD_COL4_X - SIDE_PADDING;
             Text.create("第三行终点站")
