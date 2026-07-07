@@ -1,4 +1,6 @@
 // Made by EricDing618 & DeepSeek
+// https://github.com/pyric-studio/ErjcmPack/
+// MIT LICENSE
 
 const LANG_SWITCH_INTERVAL = 15000;
 const COLOR_YELLOW = 0xFFD700;

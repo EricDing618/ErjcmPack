@@ -1,4 +1,6 @@
 // Made by EricDing618 & DeepSeek
+// https://github.com/pyric-studio/ErjcmPack/
+// MIT LICENSE
 
 // ===== 全局配置 =====
 var ROW_HEIGHT = 23;                // 每行高度（像素，用于第二、三行）
