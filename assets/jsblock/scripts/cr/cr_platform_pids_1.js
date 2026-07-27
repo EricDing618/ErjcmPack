@@ -7,7 +7,7 @@ var ROW_HEIGHT = 23;                // 每行高度（像素，用于第二、�
 var WAIT_THRESHOLD = 120000;        // 列车到达WAIT_THRESHOLD毫秒前保持显示欢迎语
 var HORIZONTAL_MARGIN = 15;         // 第一行左右边距（像素）
 var WELCOME_MESSAGES = [            // 欢迎语列表，支持用半角分号“;”分隔多行
-    "{车站名}欢迎您",
+    "{车站名}站欢迎您",
     "祝您旅途愉快",
     "安全出行 温馨相伴",
     "温馨旅途 文明相伴",
@@ -75,6 +75,8 @@ function formatTime(timestamp) {
 
 function getRandomWelcome(stationName) {
     var shortStation = splitStationName(stationName);
+    shortStation = removeTrailingStation(shortStation);
+
     var available = [];
     if (shortStation === "本站" || shortStation === "未知" || shortStation === "") {
         for (var i = 0; i < WELCOME_MESSAGES.length; i++) {
