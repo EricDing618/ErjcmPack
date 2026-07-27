@@ -4,11 +4,8 @@
 
 var CONFIG = {
     // ----- 颜色配置 -----
-    backgroundColor: 0x1a1a3e,      // 屏幕背景色（深蓝紫色，十六进制颜色值）
     primaryTextColor: 0xd0d0d0,     // 表头及普通文字颜色（浅灰色/白色）
     headerBgColor: 0x0d0d2b,        // 表头背景色（深色）
-    rowEvenColor: 0x1e1e4a,         // 偶数行背景色（深蓝紫色）
-    rowOddColor: 0x2a2a5a,          // 奇数行背景色（略亮，形成斑马纹）
     bottomLeftColor: 0x00ff66,      // 底部左侧标语颜色（亮绿色）
     bottomRightColor: 0xff4444,     // 底部右侧时间颜色（红色）
 
@@ -46,14 +43,13 @@ var CONFIG = {
     bottomTextScale: 0.55,          // 底部文字缩放比例（0.55 = 55% 大小）
 
     // ----- 站名截断 -----
-    maxStationNameLength: 6,        // ★ 站名（去掉“站”后）超过此长度时显示“...”，例如“乌鲁木齐”长度4不截断，若超过6则截断
+    maxStationNameLength: 6,        // ★ 站名（去掉“站”后）超过此长度时显示“...”
 };
 
 // ---- 截断函数 ----
 function truncateName(name, maxLen) {
     if (!name || name === '') return name;
     if (name.length <= maxLen) return name;
-    // 保留至少 1 个字符 + "..."
     var keep = Math.max(1, maxLen - 3);
     return name.substring(0, keep) + '...';
 }
@@ -100,14 +96,6 @@ function render(ctx, state, pids) {
     var currentTime = Date.now();
     var screenWidth = pids.width;
     var screenHeight = pids.height;
-
-    Text.create('background')
-        .text(' ')
-        .pos(0, 0)
-        .size(screenWidth, screenHeight)
-        .color(CONFIG.backgroundColor)
-        .stretchXY()
-        .draw(ctx);
 
     // ---- 动态控制 ----
     var hideRow0 = pids.isRowHidden(0);
@@ -443,21 +431,12 @@ function render(ctx, state, pids) {
     for (var idx = 0; idx < displayTrains.length; idx++) {
         var train = displayTrains[idx];
         var rowY = dataStartY + idx * rowHeight;
-        var bgColor = (idx % 2 === 0) ? CONFIG.rowEvenColor : CONFIG.rowOddColor;
-        Text.create('row_bg_' + idx)
-            .text(' ')
-            .pos(0, rowY - 1)
-            .size(screenWidth, rowHeight + 1)
-            .color(bgColor)
-            .stretchXY()
-            .draw(ctx);
 
         if (train.isEmpty) continue;
 
         var x = paddingLeft;
         var rowColor = hideRow1 ? CONFIG.primaryTextColor : train.statusColor;
 
-        // ★ 对站名应用截断（基于去掉“站”后的名称）
         var displayOrigin = truncateName(train.origin, CONFIG.maxStationNameLength);
         var displayDest   = truncateName(train.destination, CONFIG.maxStationNameLength);
 
