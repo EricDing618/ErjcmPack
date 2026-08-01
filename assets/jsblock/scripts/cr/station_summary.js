@@ -13,8 +13,12 @@ var CONFIG = {
     removeStationSuffix: true,      // true = 站名去掉“站”字（如“东昌北站”→“东昌北”）
 
     // ----- 状态保留时间（毫秒）-----
-    departedRetentionMs: 6000,      // 【停止检票】后保留时间（毫秒），6000ms = 6秒
+    departedRetentionMs: 6000,      // 【停止检票】发车后保留时间（毫秒），6000ms = 6秒
     terminatedRetentionMs: 10000,   // 【到达】后保留时间（毫秒），10000ms = 10秒
+
+    // ★★★ 检票状态触发提前量（毫秒） ★★★
+    checkingMsBeforeDeparture: 60000,   // 发车前多少毫秒开始显示“正在检票”（默认 1 分钟）
+    stopCheckingMsBeforeDeparture: 10000, // 发车前多少毫秒开始显示“停止检票”（默认 10 秒）
 
     // ----- 调试 -----
     DEBUG: false,                    // true = 启用调试输出（在游戏日志中打印列车信息）
@@ -90,11 +94,6 @@ function getFormattedTime() {
 function getDelayMinutes(deviationMs) {
     if (deviationMs <= 0) return 0;
     return Math.ceil(deviationMs / 60000);
-}
-
-function compareDepartureTime(first, newtime) {
-    if (first <= newtime) return first;
-    return newtime;
 }
 
 function render(ctx, state, pids) {
@@ -205,8 +204,9 @@ function render(ctx, state, pids) {
             var status = '';
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
-            
+
             if (isTerminating) {
+                // ---- 终到列车（不变） ----
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
                     actualTime = entry.arrivalTime();
@@ -231,27 +231,38 @@ function render(ctx, state, pids) {
                     }
                 }
             } else {
+                // ---- 非终到列车（新增检票提前配置） ----
                 var actualDep = departureTime;
                 if (isRealtime) actualDep = departureTime + deviationMs;
-                if (currentTime > actualDep) {
+                var remaining = actualDep - currentTime;
+
+                if (remaining > 0) {
+                    // 尚未发车
+                    if (isRealtime && deviationMs > 60000) {
+                        // 晚点超过1分钟，优先显示晚点
+                        var delayMin = getDelayMinutes(deviationMs);
+                        status = '晚点' + delayMin + '分';
+                        statusColor = 0xFF0000;
+                    } else {
+                        // 根据剩余时间判定检票状态
+                        if (remaining <= CONFIG.stopCheckingMsBeforeDeparture) {
+                            status = '停止检票';
+                            statusColor = 0xFF0000;
+                        } else if (remaining <= CONFIG.checkingMsBeforeDeparture) {
+                            status = '正在检票';
+                            statusColor = 0x00ff44;
+                        } else {
+                            status = '正点';
+                            statusColor = 0xFFFF00;
+                        }
+                    }
+                } else {
+                    // 已发车，保留原逻辑（发车后显示“停止检票”并保留一段时间）
                     if (currentTime <= actualDep + CONFIG.departedRetentionMs) {
                         status = '停止检票';
                         statusColor = 0xFF0000;
                     } else {
                         skip = true;
-                    }
-                } else {
-                    var remaining = actualDep - currentTime;
-                    if (isRealtime && deviationMs > 60000) {
-                        var delayMin = getDelayMinutes(deviationMs);
-                        status = '晚点' + delayMin + '分';
-                        statusColor = 0xFF0000;
-                    } else if (remaining <= 60000) {
-                        status = '正在检票';
-                        statusColor = 0x00ff44;
-                    } else {
-                        status = '正点';
-                        statusColor = 0xFFFF00;
                     }
                 }
             }
