@@ -92,6 +92,11 @@ function getDelayMinutes(deviationMs) {
     return Math.ceil(deviationMs / 60000);
 }
 
+function compareDepartureTime(first, newtime) {
+    if (first <= newtime) return first;
+    return newtime;
+}
+
 function render(ctx, state, pids) {
     var currentTime = Date.now();
     var screenWidth = pids.width;
@@ -200,7 +205,7 @@ function render(ctx, state, pids) {
             var status = '';
             var statusColor = CONFIG.primaryTextColor;
             var skip = false;
-
+            
             if (isTerminating) {
                 var actualTime = departureTime;
                 if (typeof entry.arrivalTime === 'function') {
