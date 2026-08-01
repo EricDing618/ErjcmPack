@@ -50,6 +50,35 @@ var CONFIG = {
     maxStationNameLength: 6,        // ★ 站名（去掉“站”后）超过此长度时显示“...”
 };
 
+// ---- 辅助函数：判断字符串是否全为数字（0-9） ----
+function isNumeric(str) {
+    if (str == null || str === '') return false;
+    for (var i = 0; i < str.length; i++) {
+        var ch = str.charAt(i);
+        if (ch < '0' || ch > '9') return false;
+    }
+    return true;
+}
+
+// ---- 辅助函数：按分号（半角或全角）分割字符串，返回数组 ----
+function splitBySemicolon(str) {
+    var result = [];
+    var current = '';
+    for (var i = 0; i < str.length; i++) {
+        var ch = str.charAt(i);
+        if (ch === ';' || ch === '；') {
+            result.push(current);
+            current = '';
+        } else {
+            current += ch;
+        }
+    }
+    if (current !== '' || result.length > 0) {
+        result.push(current);
+    }
+    return result;
+}
+
 // ---- 截断函数 ----
 function truncateName(name, maxLen) {
     if (!name || name === '') return name;
@@ -107,19 +136,55 @@ function render(ctx, state, pids) {
 
     var hideRow1 = pids.isRowHidden(1);
 
+    // hideRow2 现在用于控制右下角时间显示（不再影响显示行数）
     var hideRow2 = pids.isRowHidden(2);
-    var customMsg2 = pids.getCustomMessage(2) || '';
-    var fixedRows = CONFIG.fixedRows;
-    if (!hideRow2) {
-        var num = parseInt(customMsg2, 10);
-        if (!isNaN(num) && num > 0) fixedRows = num;
+
+    // ----- 解析第一行自定义消息（隐藏始发/终到） -----
+    var customMsg0 = (pids.getCustomMessage(0) || '').toLowerCase();
+    var enableHideOrigin = false;
+    var enableHideDest = false;
+    var parts0 = splitBySemicolon(customMsg0);
+    if (parts0.length > 0) {
+        enableHideOrigin = parts0[0].trim().indexOf('true') !== -1;
+    }
+    if (parts0.length > 1) {
+        enableHideDest = parts0[1].trim().indexOf('true') !== -1;
+    }
+    // 注意：即使没有分号，parts0 也只有一项，enableHideDest 保持 false
+
+    // ----- 解析第二行自定义消息（检票提前时间，毫秒） -----
+    var customMsg1 = (pids.getCustomMessage(1) || '').toLowerCase();
+    var checkingMsBeforeDeparture = CONFIG.checkingMsBeforeDeparture;
+    var stopCheckingMsBeforeDeparture = CONFIG.stopCheckingMsBeforeDeparture;
+    var parts1 = splitBySemicolon(customMsg1);
+    if (parts1.length > 0) {
+        var part0 = parts1[0].trim();
+        if (isNumeric(part0)) {
+            checkingMsBeforeDeparture = parseInt(part0, 10);
+        }
+    }
+    if (parts1.length > 1) {
+        var part1 = parts1[1].trim();
+        if (isNumeric(part1)) {
+            stopCheckingMsBeforeDeparture = parseInt(part1, 10);
+        }
     }
 
-    var customMsg0 = (pids.getCustomMessage(0) || '').toLowerCase();
-    var customMsg1 = (pids.getCustomMessage(1) || '').toLowerCase();
-    var enableHideOrigin = (customMsg0.indexOf('true') !== -1);
-    var enableHideDest   = (customMsg1.indexOf('true') !== -1);
+    // ----- 解析第三行自定义消息（显示行数） -----
+    var customMsg2 = pids.getCustomMessage(2) || '';
+    var fixedRows = CONFIG.fixedRows;
+    if (isNumeric(customMsg2)) {
+        var num = parseInt(customMsg2, 10);
+        if (!isNaN(num) && num > 0) {
+            fixedRows = num;
+        }
+    }
 
+    // 第四行（底部文字）逻辑保持不变
+    var hideRow3 = pids.isRowHidden(3);
+    var customMsg3 = pids.getCustomMessage(3);
+
+    // ---- 车站名称 ----
     var stationObj = pids.station();
     var stationName = stationObj ? parseStationName(stationObj.getName()) : '';
 
@@ -169,6 +234,8 @@ function render(ctx, state, pids) {
             print('显示行数: ' + fixedRows);
             print('隐藏始发本站: ' + enableHideOrigin);
             print('隐藏终到本站: ' + enableHideDest);
+            print('检查时间(ms): ' + checkingMsBeforeDeparture);
+            print('停止检票时间(ms): ' + stopCheckingMsBeforeDeparture);
         }
     }
 
@@ -231,7 +298,7 @@ function render(ctx, state, pids) {
                     }
                 }
             } else {
-                // ---- 非终到列车（新增检票提前配置） ----
+                // ---- 非终到列车（使用动态检票时间） ----
                 var actualDep = departureTime;
                 if (isRealtime) actualDep = departureTime + deviationMs;
                 var remaining = actualDep - currentTime;
@@ -244,11 +311,11 @@ function render(ctx, state, pids) {
                         status = '晚点' + delayMin + '分';
                         statusColor = 0xFF0000;
                     } else {
-                        // 根据剩余时间判定检票状态
-                        if (remaining <= CONFIG.stopCheckingMsBeforeDeparture) {
+                        // 根据剩余时间判定检票状态（使用动态配置）
+                        if (remaining <= stopCheckingMsBeforeDeparture) {
                             status = '停止检票';
                             statusColor = 0xFF0000;
-                        } else if (remaining <= CONFIG.checkingMsBeforeDeparture) {
+                        } else if (remaining <= checkingMsBeforeDeparture) {
                             status = '正在检票';
                             statusColor = 0x00ff44;
                         } else {
@@ -273,9 +340,11 @@ function render(ctx, state, pids) {
             var dest = parseStationName(destination);
             var plat = parseStationName(platform);
 
+            // 应用隐藏始发/终到本站的过滤
             if (enableHideOrigin && origin === stationName) continue;
             if (enableHideDest && dest === stationName) continue;
 
+            // 特殊转换（保持与原逻辑兼容）
             if (enableHideOrigin && status === '正在检票') {
                 status = '到达';
                 statusColor = 0x00ff44;
@@ -483,9 +552,6 @@ function render(ctx, state, pids) {
     }
 
     // ---- 底部信息 ----
-    var hideRow3 = pids.isRowHidden(3);
-    var customMsg3 = pids.getCustomMessage(3);
-
     var bottomDisplayText = '';
     if (hideRow3) {
         bottomDisplayText = CONFIG.bottomText;
@@ -532,14 +598,17 @@ function render(ctx, state, pids) {
             .leftAlign()
             .draw(ctx);
 
-        var timeStr = getFormattedTime();
-        Text.create('bottom_right')
-            .text(timeStr)
-            .pos(tableRight, bottomTextY)
-            .color(CONFIG.bottomRightColor)
-            .scale(CONFIG.bottomTextScale)
-            .rightAlign()
-            .draw(ctx);
+        // ---- 右下角时间：由 hideRow2 控制是否显示 ----
+        if (!hideRow2) {
+            var timeStr = getFormattedTime();
+            Text.create('bottom_right')
+                .text(timeStr)
+                .pos(tableRight, bottomTextY)
+                .color(CONFIG.bottomRightColor)
+                .scale(CONFIG.bottomTextScale)
+                .rightAlign()
+                .draw(ctx);
+        }
     }
 }
 
