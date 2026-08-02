@@ -143,7 +143,7 @@ function render(ctx, state, pids) {
         }
     }
 
-    var shouldShowWelcome = (!hasTrain) || (hasTrain && waitTime > WAIT_THRESHOLD);
+    var shouldShowWelcome = pids.isRowHidden(0) || (!hasTrain) || (hasTrain && waitTime > WAIT_THRESHOLD);
 
     if (shouldShowWelcome) {
         // ===== 欢迎语（不变）=====
@@ -258,7 +258,7 @@ function render(ctx, state, pids) {
                     .scale(scaleSecond)
                     .marquee()
                     .draw(ctx);
-}
+            }
             // ---- 绘制终点站 ----
             if (dest.length <= MAX_STATION_CHARS) {
                 // 静态左对齐
