@@ -16,9 +16,9 @@ var CONFIG = {
     departedRetentionMs: 6000,      // 【停止检票】发车后保留时间（毫秒），6000ms = 6秒
     terminatedRetentionMs: 10000,   // 【到达】后保留时间（毫秒），10000ms = 10秒
 
-    // ★★★ 检票状态触发提前量（毫秒） ★★★
+    // ★★★ 检票状态触发提前量（毫秒） ★★★ 
     checkingMsBeforeDeparture: 60000,   // 发车前多少毫秒开始显示“正在检票”（默认 1 分钟）
-    stopCheckingMsBeforeDeparture: 10000, // 发车前多少毫秒开始显示“停止检票”（默认 10 秒）
+    stopCheckingMsBeforeDeparture: 20000, // 发车前多少毫秒开始显示“停止检票”（默认 20 秒）
 
     // ----- 调试 -----
     DEBUG: false,                    // true = 启用调试输出（在游戏日志中打印列车信息）
@@ -61,6 +61,7 @@ function isNumeric(str) {
 }
 
 // ---- 辅助函数：按分号（半角或全角）分割字符串，返回数组 ----
+// 注意：虽然新版本不再使用分号解析第0、1行，但保留了此函数以备后用（如底部文字等）
 function splitBySemicolon(str) {
     var result = [];
     var current = '';
@@ -139,46 +140,30 @@ function render(ctx, state, pids) {
     // hideRow2 现在用于控制右下角时间显示（不再影响显示行数）
     var hideRow2 = pids.isRowHidden(2);
 
-    // ----- 解析第一行自定义消息（隐藏始发/终到） -----
+    // ============================================================
+    // ★★★ 第0、1行自定义消息解析（采用旧版本逻辑） ★★★
+    // ============================================================
+    // ----- 第0行：控制隐藏始发本站 -----
     var customMsg0 = (pids.getCustomMessage(0) || '').toLowerCase();
-    var enableHideOrigin = false;
-    var enableHideDest = false;
-    var parts0 = splitBySemicolon(customMsg0);
-    if (parts0.length > 0) {
-        enableHideOrigin = parts0[0].trim().indexOf('true') !== -1;
-    }
-    if (parts0.length > 1) {
-        enableHideDest = parts0[1].trim().indexOf('true') !== -1;
-    }
-    // 注意：即使没有分号，parts0 也只有一项，enableHideDest 保持 false
+    var enableHideOrigin = (customMsg0.indexOf('true') !== -1);
 
-    // ----- 解析第二行自定义消息（检票提前时间，毫秒） -----
+    // ----- 第1行：控制隐藏终到本站 -----
     var customMsg1 = (pids.getCustomMessage(1) || '').toLowerCase();
-    var checkingMsBeforeDeparture = CONFIG.checkingMsBeforeDeparture;
-    var stopCheckingMsBeforeDeparture = CONFIG.stopCheckingMsBeforeDeparture;
-    var parts1 = splitBySemicolon(customMsg1);
-    if (parts1.length > 0) {
-        var part0 = parts1[0].trim();
-        if (isNumeric(part0)) {
-            checkingMsBeforeDeparture = parseInt(part0, 10);
-        }
-    }
-    if (parts1.length > 1) {
-        var part1 = parts1[1].trim();
-        if (isNumeric(part1)) {
-            stopCheckingMsBeforeDeparture = parseInt(part1, 10);
-        }
-    }
+    var enableHideDest = (customMsg1.indexOf('true') !== -1);
 
-    // ----- 解析第三行自定义消息（显示行数） -----
+    // ----- 第2行：控制显示行数（保留新版本逻辑，受 hideRow2 影响） -----
     var customMsg2 = pids.getCustomMessage(2) || '';
     var fixedRows = CONFIG.fixedRows;
-    if (isNumeric(customMsg2)) {
+    if (!hideRow2) {
         var num = parseInt(customMsg2, 10);
         if (!isNaN(num) && num > 0) {
             fixedRows = num;
         }
     }
+
+    // ★★★ 检票时间完全由 CONFIG 控制，不再从自定义消息读取 ★★★
+    var checkingMsBeforeDeparture = CONFIG.checkingMsBeforeDeparture;
+    var stopCheckingMsBeforeDeparture = CONFIG.stopCheckingMsBeforeDeparture;
 
     // 第四行（底部文字）逻辑保持不变
     var hideRow3 = pids.isRowHidden(3);
@@ -298,7 +283,7 @@ function render(ctx, state, pids) {
                     }
                 }
             } else {
-                // ---- 非终到列车（使用动态检票时间） ----
+                // ---- 非终到列车（使用 CONFIG 中的检票时间） ----
                 var actualDep = departureTime;
                 if (isRealtime) actualDep = departureTime + deviationMs;
                 var remaining = actualDep - currentTime;
@@ -306,12 +291,11 @@ function render(ctx, state, pids) {
                 if (remaining > 0) {
                     // 尚未发车
                     if (isRealtime && deviationMs > 60000) {
-                        // 晚点超过1分钟，优先显示晚点
                         var delayMin = getDelayMinutes(deviationMs);
                         status = '晚点' + delayMin + '分';
                         statusColor = 0xFF0000;
                     } else {
-                        // 根据剩余时间判定检票状态（使用动态配置）
+                        // 根据剩余时间判定检票状态（使用 CONFIG 静态值）
                         if (remaining <= stopCheckingMsBeforeDeparture) {
                             status = '停止检票';
                             statusColor = 0xFF0000;
