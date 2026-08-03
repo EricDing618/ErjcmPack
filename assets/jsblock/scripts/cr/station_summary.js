@@ -18,7 +18,7 @@ var CONFIG = {
 
     // ★★★ 检票状态触发提前量（毫秒） ★★★ 
     checkingMsBeforeDeparture: 60000,   // 发车前多少毫秒开始显示“正在检票”（默认 1 分钟）
-    stopCheckingMsBeforeDeparture: 20000, // 发车前多少毫秒开始显示“停止检票”（默认 20 秒）
+    stopCheckingMsBeforeDeparture: 10000, // 发车前多少毫秒开始显示“停止检票”（默认 10 秒）
 
     // ----- 调试 -----
     DEBUG: false,                    // true = 启用调试输出（在游戏日志中打印列车信息）
@@ -151,14 +151,13 @@ function render(ctx, state, pids) {
     var customMsg1 = (pids.getCustomMessage(1) || '').toLowerCase();
     var enableHideDest = (customMsg1.indexOf('true') !== -1);
 
-    // ----- 第2行：控制显示行数（保留新版本逻辑，受 hideRow2 影响） -----
+    // ----- 第2行：控制显示行数 -----
     var customMsg2 = pids.getCustomMessage(2) || '';
     var fixedRows = CONFIG.fixedRows;
-    if (!hideRow2) {
-        var num = parseInt(customMsg2, 10);
-        if (!isNaN(num) && num > 0) {
-            fixedRows = num;
-        }
+
+    var num = parseInt(customMsg2, 10);
+    if (!isNaN(num) && num > 0) {
+        fixedRows = num;
     }
 
     // ★★★ 检票时间完全由 CONFIG 控制，不再从自定义消息读取 ★★★
